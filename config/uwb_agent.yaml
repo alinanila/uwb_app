@@ -1,0 +1,77 @@
+mode: tag_initiates_anchors_respond
+listen: anchors
+
+fira:
+  session_id: 42
+  channel: 9
+  round: ds-deferred
+  schedule: time
+  sts: static
+  # Optional static STS fields (prefer int-like values).
+  vendor_id: 0x0708 # On-wire bytes: 08:07 (CLI prints 07:08).
+  static_sts_iv: 0x060504030201 # On-wire bytes: 01:02:03:04:05:06.
+  frame: sp3
+  report: "tof|azimuth|fom"
+  # multi_node_mode: unicast keeps 1-tag/1-anchor TWR.
+  # multi_node_mode: onetomany enables O2M for multiple anchors.
+  multi_node_mode: onetomany
+  slot_duration: 2400
+  ranging_interval: 200
+  slots_per_rr: 25
+  hopping_mode: disabled
+  aoa_report: all-enabled
+  max_measurements: 0
+  rssi_reporting: false
+  enable_diagnostics: false
+  diag_fields: "metrics|aoa|cfo"
+  # Optional PHY config (must match the tag's printed PHY values).
+  # prfset: bprf4 # Applies the full BPRF4/SP3 bundle; explicit fields override.
+  # prf_mode: bprf # QM33 SDK supports only BPRF.
+  # preamble_code_index: 10
+  # sfd_id: 2
+  # psdu_data_rate: 0
+  # bprf_phr_data_rate: 0
+  # sts_length: 0
+  # number_of_sts_segments: 0
+  # selected_uwb_config_id: 0
+  # n_controlees is inferred from the anchors list for onetomany.
+
+tag:
+  mac: 0x0000
+  # connect: true requires a port and will configure/start the tag over UCI.
+  # connect: false allows a battery-powered tag to run without a PC link.
+  connect: false
+  port: "COM18"
+
+anchors:
+  - id: "A"
+    port: "COM16"
+    mac: 0x0001
+  - id: "B"
+    port: "COM17"
+    mac: 0x0002
+  - id: "C"
+    port: "COM11"
+    mac: 0x0003
+  - id: "D"
+    port: "COM19"
+    mac: 0x0004
+
+# Optional dedup for listen=both. Applied per device to avoid dropping
+# legitimate measurements from multiple anchors.
+dedup:
+  enabled: false
+  window_s: 0.25
+
+
+# Output sinks. Console output remains enabled by default.
+sinks:
+  console: true
+  zmq:
+    enabled: true
+    endpoint: "tcp://127.0.0.1:5556"
+    # bind=true for local agent/publisher. Set false to connect to a remote broker.
+    bind: true
+    topic: "meas"
+    sndhwm: 32
+    linger_ms: 0

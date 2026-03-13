@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "uwb-app"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "pyserial",
+  "colorama",
+  "pyyaml",
+  "pyzmq",
+]
+
+[project.scripts]
+uwb-run = "uwb_app.main:main"
+uwb-sim-run = "uwb_app.simulate_measurements:main"
+uwb-hub = "uwb_app.hub:main"
+uwb-localize = "uwb_app.localize:main"
+
+[tool.hatch.envs.default]
+python = "3.12"
+dependencies = [
+  "basedpyright",
+]

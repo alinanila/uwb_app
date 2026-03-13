@@ -1,0 +1,9 @@
+{
+    "ignore": [
+        "src/uci",
+        "src/uqt_utils",
+        "scripts"
+    ],
+    "typeCheckingMode": "basic",
+    "reportAttributeAccessIssue": false
+}

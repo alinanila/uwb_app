@@ -1,0 +1,25 @@
+localizer:
+  enabled: false
+  subscribe_endpoint: "tcp://127.0.0.1:5560"
+  subscribe_topic: "meas"
+  rcvhwm: 128
+  linger_ms: 0
+  batch_timeout_s: 0.25
+  max_round_age_s: 1.0
+  min_anchors: 4
+  total_anchors: 4
+  console: true
+  pose_zmq:
+    enabled: false
+    endpoint: "tcp://127.0.0.1:5561"
+    bind: true
+    topic: "pose"
+    sndhwm: 32
+    linger_ms: 0
+
+layout:
+  anchors:
+    ANCHOR:A: [0.0, 0.0]
+    ANCHOR:B: [4.0, 0.0]
+    ANCHOR:C: [0.0, 3.0]
+    ANCHOR:D: [4.0, 3.0]

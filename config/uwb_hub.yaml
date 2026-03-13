@@ -1,0 +1,14 @@
+hub:
+  enabled: false
+  upstream_endpoints:
+    # - "tcp://127.0.0.1:5556" # use for single-host mode
+    - "tcp://192.168.1.101:5556" # anchor A agent PUB
+    - "tcp://192.168.1.102:5556" # anchor B agent PUB
+    - "tcp://192.168.1.103:5556" # anchor C agent PUB
+    - "tcp://127.0.0.1:5556"     # anchor D agent PUB (local)
+  upstream_topic: "meas"
+  downstream_endpoint: "tcp://127.0.0.1:5560"
+  downstream_bind: true
+  rcvhwm: 128
+  sndhwm: 128
+  linger_ms: 0
