@@ -1,0 +1,13 @@
+[Unit]
+Description=UWB Agent
+After=network.target
+
+[Service]
+User=localuwb
+WorkingDirectory=/home/localuwb/uwb_app
+ExecStart=/home/localuwb/.local/bin/hatch run uwb-run --config config/uwb_agent.yaml -t -1
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

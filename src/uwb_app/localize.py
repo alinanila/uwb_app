@@ -140,6 +140,7 @@ class Localizer:
         self._dropped_incomplete = 0
         self._dropped_bad = 0
         self._publisher = PosePublisher(cfg) if cfg.pose_sink.enabled else None
+        self._peer_sessions: dict[str, set[int]] = {}
 
     def _process_message(self, payload: bytes, now_mono: float) -> None:
         try:
@@ -194,6 +195,23 @@ class Localizer:
 
         if self.cfg.total_anchors is not None and len(state.measurements) >= self.cfg.total_anchors:
             self._emit_round(key, state, event)
+
+        # log issue if session IDs unsync again
+        sessions_by_peer = getattr(self, "_peer_sessions", None)
+        if sessions_by_peer is None:
+            sessions_by_peer = {}
+            self._peer_sessions = sessions_by_peer
+
+        sessions = sessions_by_peer.setdefault(peer_label, set())
+        sessions.add(session_handle)
+
+        if len(sessions) > 1:
+            log.warning(
+                "Multiple session handles for peer %s: %s; "
+                "this may prevent anchors from fusing into one round",
+                peer_label,
+                sorted(sessions),
+            )
 
     def _emit_round(
         self,

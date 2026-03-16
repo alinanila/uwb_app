@@ -1,0 +1,14 @@
+[Unit]
+Description=UWB Localizer
+After=network.target uwb-hub.service
+Requires=uwb-hub.service
+
+[Service]
+User=localuwb
+WorkingDirectory=/home/localuwb/uwb_app
+ExecStart=/home/localuwb/.local/bin/hatch run uwb-localize --config config/uwb_localizer.yaml
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

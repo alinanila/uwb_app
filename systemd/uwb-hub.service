@@ -1,0 +1,14 @@
+[Unit]
+Description=UWB Hub
+After=network.target
+Requires=uwb-agent.service
+
+[Service]
+User=localuwb
+WorkingDirectory=/home/localuwb/uwb_app
+ExecStart=/home/localuwb/.local/bin/hatch run uwb-hub --config config/uwb_hub.yaml
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

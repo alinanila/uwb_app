@@ -16,8 +16,8 @@ fira:
   # multi_node_mode: onetomany enables O2M for multiple anchors.
   multi_node_mode: onetomany
   slot_duration: 2400
-  ranging_interval: 200
-  slots_per_rr: 25
+  ranging_interval: 30
+  slots_per_rr: 12
   hopping_mode: disabled
   aoa_report: all-enabled
   max_measurements: 0
@@ -43,19 +43,20 @@ tag:
   connect: false
   port: "COM18"
 
+# comment out anchors as appropriate
 anchors:
   - id: "A"
-    port: "COM16"
+    port: "/dev/ttyACM0"
     mac: 0x0001
-  - id: "B"
-    port: "COM17"
-    mac: 0x0002
-  - id: "C"
-    port: "COM11"
-    mac: 0x0003
-  - id: "D"
-    port: "COM19"
-    mac: 0x0004
+  # - id: "B"
+  #   port: "/dev/ttyACM0"
+  #   mac: 0x0002
+  # - id: "C"
+  #   port: "/dev/ttyACM0"
+  #   mac: 0x0003
+  # - id: "D"
+  #   port: "/dev/ttyACM0"
+  #   mac: 0x0004
 
 # Optional dedup for listen=both. Applied per device to avoid dropping
 # legitimate measurements from multiple anchors.
