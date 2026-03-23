@@ -2,9 +2,9 @@ name: Tests (hatch)
 
 on:
   push:
-    branches: ["demo_app"]
+    branches: ["main"]
   pull_request:
-    branches: ["demo_app"]
+    branches: ["main"]
 
 jobs:
   test:
