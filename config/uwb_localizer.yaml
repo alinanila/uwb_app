@@ -20,6 +20,6 @@ localizer:
 layout:
   anchors:
     ANCHOR:A: [0.0, 0.0]
-    ANCHOR:B: [4.0, 0.0]
-    ANCHOR:C: [0.0, 3.0]
-    ANCHOR:D: [4.0, 3.0]
+    ANCHOR:B: [0.0, 3.0]
+    ANCHOR:C: [4.0, 3.0]
+    ANCHOR:D: [4.0, 0.0]
