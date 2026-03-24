@@ -155,7 +155,7 @@ def index() -> str:
 <body>
   <h1>UWB Anchor & Tag Viewer</h1>
   <p>Grid in meters (scaled). Anchors are blue squares, tag is red circle.</p>
-  <canvas id="canvas" width="600" height="400"></canvas>
+  <canvas id="canvas" width="1000" height="700"></canvas>
   <p id="info"></p>
 
   <script>
@@ -164,70 +164,94 @@ def index() -> str:
     const info = document.getElementById('info');
 
     let anchors = [];
-    let scale = 40; // pixels per meter (adjust as needed)
+    let scale = 60; // pixels per meter (increase for larger drawing)
     let margin = 20;
 
     function worldToCanvas(x, y) {
-      // Invert y so positive y is "up" on screen
-      return {
-        cx: margin + x * scale,
-        cy: canvas.height - margin - y * scale
-      };
+      // Center (0,0) in the middle of the canvas, +y up
+      const cx = canvas.width / 2 + x * scale;
+      const cy = canvas.height / 2 - y * scale;
+      return { cx, cy };
     }
 
-    function drawGrid(maxX, maxY) {
+    function drawGrid(maxExtent) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.strokeStyle = '#eee';
       ctx.lineWidth = 1;
 
       const step = 1; // 1 meter grid
-      for (let x = 0; x <= maxX; x += step) {
-        const p1 = worldToCanvas(x, 0);
-        const p2 = worldToCanvas(x, maxY);
+      // Draw vertical lines from -maxExtent to +maxExtent
+      for (let x = -maxExtent; x <= maxExtent; x += step) {
+        const p1 = worldToCanvas(x, -maxExtent);
+        const p2 = worldToCanvas(x,  maxExtent);
         ctx.beginPath();
         ctx.moveTo(p1.cx, p1.cy);
         ctx.lineTo(p2.cx, p2.cy);
         ctx.stroke();
       }
-      for (let y = 0; y <= maxY; y += step) {
-        const p1 = worldToCanvas(0, y);
-        const p2 = worldToCanvas(maxX, y);
+      // Draw horizontal lines
+      for (let y = -maxExtent; y <= maxExtent; y += step) {
+        const p1 = worldToCanvas(-maxExtent, y);
+        const p2 = worldToCanvas( maxExtent, y);
         ctx.beginPath();
         ctx.moveTo(p1.cx, p1.cy);
         ctx.lineTo(p2.cx, p2.cy);
         ctx.stroke();
       }
+
+      // Draw axes
+      ctx.strokeStyle = '#ccc';
+      ctx.lineWidth = 1.5;
+      // x-axis
+      let p1 = worldToCanvas(-maxExtent, 0);
+      let p2 = worldToCanvas( maxExtent, 0);
+      ctx.beginPath();
+      ctx.moveTo(p1.cx, p1.cy);
+      ctx.lineTo(p2.cx, p2.cy);
+      ctx.stroke();
+      // y-axis
+      p1 = worldToCanvas(0, -maxExtent);
+      p2 = worldToCanvas(0,  maxExtent);
+      ctx.beginPath();
+      ctx.moveTo(p1.cx, p1.cy);
+      ctx.lineTo(p2.cx, p2.cy);
+      ctx.stroke();
     }
 
     function drawAnchors() {
       ctx.fillStyle = 'blue';
+      ctx.font = '12px sans-serif';
       anchors.forEach(a => {
-        const {cx, cy} = worldToCanvas(a.x, a.y);
+        const { cx, cy } = worldToCanvas(a.x, a.y);
         const size = 6;
-        ctx.fillRect(cx - size/2, cy - size/2, size, size);
-        ctx.fillText(a.id, cx + 4, cy - 4);
+        ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
+        ctx.fillText(a.id, cx + 6, cy - 6);
       });
     }
 
     function drawTag(x, y) {
       ctx.fillStyle = 'red';
-      const {cx, cy} = worldToCanvas(x, y);
+      const { cx, cy } = worldToCanvas(x, y);
       ctx.beginPath();
-      ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
+      ctx.arc(cx, cy, 6, 0, 2 * Math.PI);
       ctx.fill();
+    }
+
+    function computeMaxExtent(extraMargin = 1) {
+      // Determine symmetric extent around origin that covers anchors (and later tag)
+      let maxAbs = 1;
+      anchors.forEach(a => {
+        maxAbs = Math.max(maxAbs, Math.abs(a.x), Math.abs(a.y));
+      });
+      return maxAbs + extraMargin;
     }
 
     async function loadLayout() {
       const res = await fetch('/api/layout');
       const data = await res.json();
       anchors = data.anchors || [];
-      // Determine rough bounds for grid
-      let maxX = 5, maxY = 5;
-      anchors.forEach(a => {
-        if (a.x > maxX) maxX = a.x + 1;
-        if (a.y > maxY) maxY = a.y + 1;
-      });
-      drawGrid(maxX, maxY);
+      const maxExtent = computeMaxExtent();
+      drawGrid(maxExtent);
       drawAnchors();
     }
 
@@ -235,16 +259,11 @@ def index() -> str:
       const res = await fetch('/api/pose');
       const data = await res.json();
       if (data.has_pose) {
-        // Redraw grid and anchors, then tag
-        let maxX = 5, maxY = 5;
-        anchors.forEach(a => {
-          if (a.x > maxX) maxX = a.x + 1;
-          if (a.y > maxY) maxY = a.y + 1;
-        });
-        if (data.x > maxX) maxX = data.x + 1;
-        if (data.y > maxY) maxY = data.y + 1;
+        // Include tag in extents
+        let maxAbs = computeMaxExtent();
+        maxAbs = Math.max(maxAbs, Math.abs(data.x), Math.abs(data.y)) + 1;
 
-        drawGrid(maxX, maxY);
+        drawGrid(maxAbs);
         drawAnchors();
         drawTag(data.x, data.y);
         info.textContent = `Tag ${data.peer_id || ''} at x=${data.x.toFixed(2)} m, y=${data.y.toFixed(2)} m`;
