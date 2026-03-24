@@ -13,7 +13,7 @@ dependencies = [
   "pyzmq",
   "textual"
   "fastapi",
-  "uvicorn[standard]"
+  "uvicorn[standard]",
 ]
 
 [project.scripts]
