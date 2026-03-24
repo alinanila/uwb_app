@@ -1,0 +1,14 @@
+[Unit]
+Description=UWB Pose Web Server
+After=network.target uwb-localize.service
+Requires=uwb-localize.service
+
+[Service]
+User=localuwb
+WorkingDirectory=/home/localuwb/uwb_app
+ExecStart=/home/localuwb/.local/share/hatch/env/virtual/uwb-app/oIQVJ1UC/uwb-app/bin/uvicorn uwb_app.pose_server:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

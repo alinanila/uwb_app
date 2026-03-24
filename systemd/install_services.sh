@@ -5,6 +5,7 @@ set -euo pipefail
 #./systemd/install_services.sh agent
 #./systemd/install_services.sh hub
 #./systemd/install_services.sh localizer
+#./systemd/install_services.sh server
 #./systemd/install_services.sh all
 
 SERVICE_DIR="/etc/systemd/system"
@@ -37,6 +38,15 @@ install_localizer() {
   sudo systemctl status uwb-localize --no-pager || true
 }
 
+install_server() {
+  echo "Installing uwb-server.service..."
+  sudo cp "$REPO_DIR/systemd/uwb-server.service" "$SERVICE_DIR/"
+  sudo systemctl daemon-reload
+  sudo systemctl enable uwb-server
+  sudo systemctl restart uwb-server
+  sudo systemctl status uwb-server --no-pager || true
+}
+
 case "${1:-}" in
   agent)
     install_agent
@@ -47,13 +57,17 @@ case "${1:-}" in
   localizer)
     install_localizer
     ;;
+  server)
+    install_server
+    ;;
   all)
     install_agent
     install_hub
     install_localizer
+    install_server
     ;;
   *)
-    echo "Usage: $0 {agent|hub|localizer|all}"
+    echo "Usage: $0 {agent|hub|localizer|server|all}"
     exit 1
     ;;
 esac
