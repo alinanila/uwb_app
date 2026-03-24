@@ -164,7 +164,7 @@ def index() -> str:
     const info = document.getElementById('info');
 
     let anchors = [];
-    let scale = 60; // pixels per meter (increase for larger drawing)
+    let scale = 200; // pixels per meter (increase for larger drawing)
     let margin = 20;
 
     function worldToCanvas(x, y) {
