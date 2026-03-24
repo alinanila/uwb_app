@@ -106,7 +106,7 @@ class LayoutEditorApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        # load layout and fill table
+        # at startup, load layout
         try:
             self.layout_path = get_layout_file(self.config_path)
             self.anchors = load_layout(self.layout_path)
@@ -114,6 +114,7 @@ class LayoutEditorApp(App):
             self.status.message = f"error loading layout: {e}"
             return
 
+        # and fill table with anchor ids and positions
         for anchor_id, (x, y) in sorted(self.anchors.items()):
             self.table.add_row(anchor_id, f"{x:.3f}", f"{y:.3f}")
         if self.table.row_count > 0:
@@ -129,7 +130,7 @@ class LayoutEditorApp(App):
         row, col = self.table.cursor_coordinate
         # only allow editing x and y (columns 1 and 2)
         if col not in (1, 2):
-            self.status.message = "Select X or Y column to edit."
+            self.status.message = "select x or y column"
             return
         self.table.edit_cell_at(row, col)
 
