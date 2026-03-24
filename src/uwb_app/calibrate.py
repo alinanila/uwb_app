@@ -166,7 +166,7 @@ def main() -> None:
     parser.add_argument(
         "--avg-seconds",
         type=float,
-        default=2.0,
+        default=10.0,
         help="averaging window in seconds at each calibration position (default: %(default)s)",
     )
     args = parser.parse_args()

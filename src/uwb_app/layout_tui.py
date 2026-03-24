@@ -5,8 +5,9 @@ from typing import Dict, Tuple
 
 import yaml
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, DataTable, Static
+from textual.widgets import Header, Footer, DataTable, Static, Input
 from textual.reactive import reactive
+from textual.events import Key
 
 from .local_apps_config import (
     load_localizer_cfg, 
@@ -94,13 +95,19 @@ class LayoutEditorApp(App):
         self.layout_path: Path | None = None
         self.anchors: Dict[str, Tuple[float, float]] = {}
         self.table: DataTable
+        self.edit_input: Input
+        self._edit_row: int | None = None
+        self._edit_col: int | None = None
         self.status: StatusBar
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
+        yield Header()
         self.table = DataTable(id="table")
         self.table.add_columns("Anchor ID", "X (m)", "Y (m)")
         yield self.table
+        self.edit_input = Input(placeholder="enter new value", id="edit_input")
+        self.edit_input.display = False
+        yield self.edit_input
         self.status = StatusBar(id="status")
         yield self.status
         yield Footer()
@@ -132,11 +139,41 @@ class LayoutEditorApp(App):
         if col not in (1, 2):
             self.status.message = "select x or y column"
             return
-        self.table.edit_cell_at(row, col)
+        
+        self._edit_row = row
+        self._edit_col = col
 
-    def on_data_table_cell_edited(self, event: DataTable.CellEdited) -> None:
-        """update internal anchors dict when a cell is edited"""
-        row, col = event.coordinate
+        current_value = self.table.get_cell_at(row,col)
+        self.edit_input.value = str(current_value)
+        self.edit_input.display = True
+        self.edit_input.focus()
+        self.status.message = "enter new value and press enter"
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """apply the new value to table and anchors dict"""
+        if event.input.id != "edit_input":
+            return
+        if self._edit_row is None or self._edit_col is None:
+            self.status.message = "no cell selected for editing"
+            self.edit_input.display = False
+            return
+
+        row = self._edit_row
+        col = self._edit_col
+        new_text = event.value.strip()
+
+        # valid input?
+        try:
+            new_val = float(new_text)
+        except ValueError:
+            self.status.message = f"invalid value: {new_text!r}"
+            self.edit_input.display = False
+            return
+
+        # update table
+        self.table.update_cell(row, col, f"{new_val:.3f}")
+
+        # update internal anchors dict
         anchor_id = self.table.get_cell_at(row, 0)
         x_str = self.table.get_cell_at(row, 1)
         y_str = self.table.get_cell_at(row, 2)
@@ -144,10 +181,16 @@ class LayoutEditorApp(App):
             x = float(x_str)
             y = float(y_str)
         except ValueError:
-            self.status.message = f"invalid value for anchor {anchor_id}."
-            return
-        self.anchors[str(anchor_id)] = (x, y)
-        self.status.message = f"updated {anchor_id} to ({x:.3f}, {y:.3f})."
+            self.status.message = f"Invalid numeric state for anchor {anchor_id}."
+        else:
+            self.anchors[str(anchor_id)] = (x, y)
+            self.status.message = f"Updated {anchor_id} to ({x:.3f}, {y:.3f})."
+
+        # hide input and return focus to table
+        self.edit_input.display = False
+        self.table.focus()
+        self._edit_row = None
+        self._edit_col = None
 
     def action_save_layout(self) -> None:
         """save anchors back to layout"""
