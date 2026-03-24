@@ -12,7 +12,7 @@ dependencies = [
   "pyyaml",
   "pyzmq",
   "fastapi",
-  "uvicorn[standard]"
+  "uvicorn[standard]",
   "pydantic>=2,<3"
 ]
 
