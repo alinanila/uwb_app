@@ -11,9 +11,9 @@ dependencies = [
   "colorama",
   "pyyaml",
   "pyzmq",
-  "textual",
   "fastapi",
   "uvicorn[standard]"
+  "pydantic>=2,<3"
 ]
 
 [project.scripts]
@@ -22,7 +22,7 @@ uwb-sim-run = "uwb_app.simulate_measurements:main"
 uwb-hub = "uwb_app.hub:main"
 uwb-localize = "uwb_app.localize:main"
 uwb-calibrate = "uwb_app.calibrate:main"
-uwb-layout-tui = "uwb_app.layout_tui:main"
+uwb-server = "uwb_app.pose_server:app"
 
 [tool.hatch.envs.default]
 python = "3.12"

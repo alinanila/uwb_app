@@ -5,12 +5,14 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 
 import zmq
 import yaml
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+import subprocess
 
 from .local_apps_config import (
     load_localizer_cfg, 
@@ -62,6 +64,16 @@ def load_layout(path: Path) -> Dict[str, Tuple[float, float]]:
     return anchors
 
 
+def save_layout(path: Path, anchors: Dict[str, Tuple[float, float]]) -> None:
+    data = load_yaml_mapping(path)
+    layout = data.setdefault("layout", {})
+    anchors_out = layout.setdefault("anchors, {}")
+    for source_id, (x, y) in anchors.items():
+        anchors_out[source_id] = [float(x), float(y)]
+    with path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, sort_keys=False)
+
+
 def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOPIC) -> None:
     """background thread: subscribe to pose ZMQ and update pose_state"""
     ctx = zmq.Context.instance()
@@ -100,6 +112,20 @@ def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOP
         ctx.term()
 
 
+def restart_localizer_service() -> None:
+    """
+    restart uwb-localize service with new layout
+    assumes the app and the service are running on the same host
+    """
+    try:
+        subprocess.run(
+            ["sudo", "systemctl", "restart", "uwb-localize"],
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"failed to restart uwb-localize: {e}")
+
+
 app = FastAPI(title="UWB Localisation Visualiser")
 
 
@@ -110,17 +136,39 @@ def startup_event() -> None:
     t.start()
 
 
+class Anchor(BaseModel):
+    id: str
+    x: float
+    y: float
+
+
+class LayoutUpdate(BaseModel):
+    anchors: List[Anchor]
+
+
 @app.get("/api/layout")
 def api_layout():
     # load anchor layout
     layout_file = get_layout_file()
     anchors = load_layout(layout_file)
-    return {
-        "anchors": [
-            {"id": aid, "x": x, "y": y}
-            for aid, (x, y) in sorted(anchors.items())
+    return LayoutUpdate(
+        anchors = [
+            Anchor(id=aid, x=pos[0], y=pos[1])
+            for aid, pos in sorted(anchors.items())
         ]
-    }
+    )
+
+
+@app.post("/api/layout")
+def api_update_layout(update: LayoutUpdate):
+    layout_file = get_layout_file()
+    anchors = {a.id: (a.x, a.y) for a in update.anchors}
+    save_layout(layout_file, anchors)
+
+    # restart uwb-localize with new layout
+    restart_localizer_service()
+
+    return {"status": "ok"}
 
 
 @app.get("/api/pose")
@@ -140,7 +188,7 @@ def api_pose():
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
-    # HTML+JS canvas with grid, anchors, and tag
+    # Single page: anchor editor + visualization
     return """
 <!DOCTYPE html>
 <html>
@@ -148,23 +196,44 @@ def index() -> str:
   <meta charset="utf-8" />
   <title>UWB Anchor & Tag Viewer</title>
   <style>
-    body { font-family: sans-serif; margin: 1rem; }
+    body { font-family: sans-serif; margin: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+    #top { display: flex; gap: 2rem; }
+    #anchors { border-collapse: collapse; }
+    #anchors th, #anchors td { border: 1px solid #ccc; padding: 0.3rem 0.6rem; }
+    #anchors input[type="number"] { width: 5rem; }
     canvas { border: 1px solid #ccc; }
+    button { padding: 0.3rem 0.8rem; margin-top: 0.5rem; }
   </style>
 </head>
 <body>
-  <h1>UWB Anchor & Tag Viewer</h1>
-  <p>Grid in meters (scaled). Anchors are blue squares, tag is red circle.</p>
-  <canvas id="canvas" width="1000" height="700"></canvas>
-  <p id="info"></p>
+  <h1>UWB Anchor &amp; Tag Viewer</h1>
+  <div id="top">
+    <div>
+      <h2>Anchor Layout</h2>
+      <table id="anchors">
+        <thead>
+          <tr><th>Anchor ID</th><th>X (m)</th><th>Y (m)</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button onclick="saveLayout()">Save Layout</button>
+      <p id="status"></p>
+    </div>
+    <div>
+      <h2>Visualization</h2>
+      <canvas id="canvas" width="800" height="600"></canvas>
+      <p id="info"></p>
+    </div>
+  </div>
 
   <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const info = document.getElementById('info');
+    const statusEl = document.getElementById('status');
 
     let anchors = [];
-    let scale = 200; // pixels per meter (increase for larger drawing)
+    let scale = 60; // pixels per meter
     let margin = 20;
 
     function worldToCanvas(x, y) {
@@ -180,7 +249,6 @@ def index() -> str:
       ctx.lineWidth = 1;
 
       const step = 1; // 1 meter grid
-      // Draw vertical lines from -maxExtent to +maxExtent
       for (let x = -maxExtent; x <= maxExtent; x += step) {
         const p1 = worldToCanvas(x, -maxExtent);
         const p2 = worldToCanvas(x,  maxExtent);
@@ -189,7 +257,6 @@ def index() -> str:
         ctx.lineTo(p2.cx, p2.cy);
         ctx.stroke();
       }
-      // Draw horizontal lines
       for (let y = -maxExtent; y <= maxExtent; y += step) {
         const p1 = worldToCanvas(-maxExtent, y);
         const p2 = worldToCanvas( maxExtent, y);
@@ -199,17 +266,15 @@ def index() -> str:
         ctx.stroke();
       }
 
-      // Draw axes
+      // Axes
       ctx.strokeStyle = '#ccc';
       ctx.lineWidth = 1.5;
-      // x-axis
       let p1 = worldToCanvas(-maxExtent, 0);
       let p2 = worldToCanvas( maxExtent, 0);
       ctx.beginPath();
       ctx.moveTo(p1.cx, p1.cy);
       ctx.lineTo(p2.cx, p2.cy);
       ctx.stroke();
-      // y-axis
       p1 = worldToCanvas(0, -maxExtent);
       p2 = worldToCanvas(0,  maxExtent);
       ctx.beginPath();
@@ -238,7 +303,6 @@ def index() -> str:
     }
 
     function computeMaxExtent(extraMargin = 1) {
-      // Determine symmetric extent around origin that covers anchors (and later tag)
       let maxAbs = 1;
       anchors.forEach(a => {
         maxAbs = Math.max(maxAbs, Math.abs(a.x), Math.abs(a.y));
@@ -248,21 +312,84 @@ def index() -> str:
 
     async function loadLayout() {
       const res = await fetch('/api/layout');
+      if (!res.ok) {
+        statusEl.textContent = 'Error loading layout';
+        return;
+      }
       const data = await res.json();
       anchors = data.anchors || [];
+
+      // Populate table
+      const tbody = document.querySelector('#anchors tbody');
+      tbody.innerHTML = '';
+      anchors.forEach(a => {
+        const tr = document.createElement('tr');
+
+        const tdId = document.createElement('td');
+        tdId.textContent = a.id;
+        tr.appendChild(tdId);
+
+        const tdX = document.createElement('td');
+        const inputX = document.createElement('input');
+        inputX.type = 'number';
+        inputX.step = '0.01';
+        inputX.value = a.x;
+        inputX.dataset.anchorId = a.id;
+        inputX.dataset.coord = 'x';
+        tdX.appendChild(inputX);
+        tr.appendChild(tdX);
+
+        const tdY = document.createElement('td');
+        const inputY = document.createElement('input');
+        inputY.type = 'number';
+        inputY.step = '0.01';
+        inputY.value = a.y;
+        inputY.dataset.anchorId = a.id;
+        inputY.dataset.coord = 'y';
+        tdY.appendChild(inputY);
+        tr.appendChild(tdY);
+
+        tbody.appendChild(tr);
+      });
+
       const maxExtent = computeMaxExtent();
       drawGrid(maxExtent);
       drawAnchors();
+      statusEl.textContent = '';
+    }
+
+    async function saveLayout() {
+      const inputs = document.querySelectorAll('#anchors input');
+      const anchorsMap = {};
+      inputs.forEach(input => {
+        const id = input.dataset.anchorId;
+        const coord = input.dataset.coord;
+        const value = parseFloat(input.value);
+        if (!anchorsMap[id]) {
+          anchorsMap[id] = {id: id, x: 0, y: 0};
+        }
+        anchorsMap[id][coord] = value;
+      });
+      const anchorsArr = Object.values(anchorsMap);
+      const res = await fetch('/api/layout', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({anchors: anchorsArr})
+      });
+      if (res.ok) {
+        statusEl.textContent = 'Saved layout.';
+        anchors = anchorsArr;
+      } else {
+        statusEl.textContent = 'Error saving layout.';
+      }
     }
 
     async function pollPose() {
       const res = await fetch('/api/pose');
       const data = await res.json();
       if (data.has_pose) {
-        // Include tag in extents
         let maxAbs = computeMaxExtent();
         maxAbs = Math.max(maxAbs, Math.abs(data.x), Math.abs(data.y)) + 1;
-
         drawGrid(maxAbs);
         drawAnchors();
         drawTag(data.x, data.y);
@@ -273,7 +400,7 @@ def index() -> str:
     }
 
     loadLayout();
-    setInterval(pollPose, 200); // poll every 200 ms
+    setInterval(pollPose, 200);
   </script>
 </body>
 </html>
