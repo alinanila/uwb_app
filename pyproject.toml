@@ -11,9 +11,9 @@ dependencies = [
   "colorama",
   "pyyaml",
   "pyzmq",
-  "textual"
+  "textual",
   "fastapi",
-  "uvicorn[standard]",
+  "uvicorn[standard]"
 ]
 
 [project.scripts]
