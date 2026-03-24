@@ -19,6 +19,7 @@ uwb-sim-run = "uwb_app.simulate_measurements:main"
 uwb-hub = "uwb_app.hub:main"
 uwb-localize = "uwb_app.localize:main"
 uwb-calibrate = "uwb_app.calibrate:main"
+uwb-layout-tui = "uwb_app.layout_tui:main"
 
 [tool.hatch.envs.default]
 python = "3.12"

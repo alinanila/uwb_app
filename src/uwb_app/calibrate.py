@@ -11,8 +11,10 @@ from typing import Dict
 import zmq
 import yaml
 
-from.local_apps_config import load_localizer_cfg, load_yaml_mapping
-
+from .local_apps_config import (
+    load_localizer_cfg, 
+    load_yaml_mapping,
+)
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent.parent
