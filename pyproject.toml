@@ -12,6 +12,8 @@ dependencies = [
   "pyyaml",
   "pyzmq",
   "textual"
+  "fastapi",
+  "uvicorn[standard]"
 ]
 
 [project.scripts]
