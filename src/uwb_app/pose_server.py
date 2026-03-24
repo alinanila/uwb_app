@@ -67,9 +67,17 @@ def load_layout(path: Path) -> Dict[str, Tuple[float, float]]:
 def save_layout(path: Path, anchors: Dict[str, Tuple[float, float]]) -> None:
     data = load_yaml_mapping(path)
     layout = data.setdefault("layout", {})
-    anchors_out = layout.setdefault("anchors, {}")
+    if not isinstance(layout, dict):
+        raise ValueError(f"layout in {path} must be a mapping")
+
+    anchors_out = layout.get("anchors")
+    if not isinstance(anchors_out, dict):
+        anchors_out = {}
+        layout["anchors"] = anchors_out
+
     for source_id, (x, y) in anchors.items():
         anchors_out[source_id] = [float(x), float(y)]
+
     with path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, sort_keys=False)
 
