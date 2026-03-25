@@ -238,11 +238,11 @@ def index() -> str:
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const info = document.getElementById('info');
-    const statusEl = document.getElementById('status');
+    const statusEl = document.getElementById('status') || { textContent: "" };
 
     let anchors = [];
-    let scale = 60; // pixels per meter
-    let margin = 20;
+    let scale = 60; // pixels per meter (will be recomputed dynamically)
+    const margin = 40; // pixels around the drawing
 
     function worldToCanvas(x, y) {
       // Center (0,0) in the middle of the canvas, +y up
@@ -251,8 +251,73 @@ def index() -> str:
       return { cx, cy };
     }
 
-    function drawGrid(maxExtent) {
+    function computeBounds(includeTag) {
+      // Compute min/max x,y over anchors (and optionally tag)
+      let minX = 0, maxX = 0, minY = 0, maxY = 0;
+      let initialized = false;
+
+      anchors.forEach(a => {
+        if (!initialized) {
+          minX = maxX = a.x;
+          minY = maxY = a.y;
+          initialized = true;
+        } else {
+          minX = Math.min(minX, a.x);
+          maxX = Math.max(maxX, a.x);
+          minY = Math.min(minY, a.y);
+          maxY = Math.max(maxY, a.y);
+        }
+      });
+
+      if (!initialized) {
+        // No anchors; default small bounds
+        minX = -1; maxX = 1; minY = -1; maxY = 1;
+      }
+
+      if (includeTag && lastPose.has_pose) {
+        const x = lastPose.x;
+        const y = lastPose.y;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+
+      return { minX, maxX, minY, maxY };
+    }
+
+    function computeScale(bounds) {
+      const { minX, maxX, minY, maxY } = bounds;
+
+      // World width/height in meters
+      const width_m  = Math.max(1, maxX - minX);
+      const height_m = Math.max(1, maxY - minY);
+
+      // Available pixels (minus margins)
+      const width_px  = canvas.width  - 2 * margin;
+      const height_px = canvas.height - 2 * margin;
+
+      // Choose scale so that both dimensions fit
+      const sx = width_px  / width_m;
+      const sy = height_px / height_m;
+
+      // Use the smaller scale to fit both directions
+      let s = Math.min(sx, sy);
+
+      // Clamp scale to reasonable range
+      const MIN_SCALE = 20;  // 20 px/m (zoomed out)
+      const MAX_SCALE = 200; // 200 px/m (zoomed in)
+      s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
+
+      return s;
+    }
+
+    function drawGrid(bounds) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const { minX, maxX, minY, maxY } = bounds;
+      const maxExtent = Math.max(Math.abs(minX), Math.abs(maxX), Math.abs(minY), Math.abs(maxY)) + 1;
+
       ctx.strokeStyle = '#eee';
       ctx.lineWidth = 1;
 
@@ -310,13 +375,17 @@ def index() -> str:
       ctx.fill();
     }
 
-    function computeMaxExtent(extraMargin = 1) {
-      let maxAbs = 1;
-      anchors.forEach(a => {
-        maxAbs = Math.max(maxAbs, Math.abs(a.x), Math.abs(a.y));
-      });
-      return maxAbs + extraMargin;
+    function computeAndDraw(includeTag) {
+      const bounds = computeBounds(includeTag);
+      scale = computeScale(bounds);
+      drawGrid(bounds);
+      drawAnchors();
+      if (includeTag && lastPose.has_pose) {
+        drawTag(lastPose.x, lastPose.y);
+      }
     }
+
+    let lastPose = { has_pose: false, x: 0, y: 0, peer_id: null };
 
     async function loadLayout() {
       const res = await fetch('/api/layout');
@@ -326,8 +395,59 @@ def index() -> str:
       }
       const data = await res.json();
       anchors = data.anchors || [];
+      statusEl.textContent = '';
+      computeAndDraw(false);
+    }
 
-      // Populate table
+    async function saveLayout() {
+      const inputs = document.querySelectorAll('#anchors input');
+      const anchorsMap = {};
+      inputs.forEach(input => {
+        const id = input.dataset.anchorId;
+        const coord = input.dataset.coord;
+        const value = parseFloat(input.value);
+        if (!anchorsMap[id]) {
+          anchorsMap[id] = {id: id, x: 0, y: 0};
+        }
+        anchorsMap[id][coord] = value;
+      });
+      const anchorsArr = Object.values(anchorsMap);
+      const res = await fetch('/api/layout', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({anchors: anchorsArr})
+      });
+      if (res.ok) {
+        statusEl.textContent = 'Saved layout.';
+        anchors = anchorsArr;
+        computeAndDraw(true);
+      } else {
+        statusEl.textContent = 'Error saving layout.';
+      }
+    }
+
+    async function pollPose() {
+      const res = await fetch('/api/pose');
+      const data = await res.json();
+      if (data.has_pose) {
+        lastPose = data;
+        computeAndDraw(true);
+        info.textContent = `Tag ${data.peer_id || ''} at x=${data.x.toFixed(2)} m, y=${data.y.toFixed(2)} m`;
+      } else {
+        info.textContent = 'No pose yet.';
+      }
+    }
+
+    // Populate anchor table (same as before)
+    async function initAnchorsTable() {
+      const res = await fetch('/api/layout');
+      if (!res.ok) {
+        statusEl.textContent = 'Error loading layout';
+        return;
+      }
+      const data = await res.json();
+      anchors = data.anchors || [];
+
       const tbody = document.querySelector('#anchors tbody');
       tbody.innerHTML = '';
       anchors.forEach(a => {
@@ -360,54 +480,10 @@ def index() -> str:
         tbody.appendChild(tr);
       });
 
-      const maxExtent = computeMaxExtent();
-      drawGrid(maxExtent);
-      drawAnchors();
-      statusEl.textContent = '';
+      computeAndDraw(false);
     }
 
-    async function saveLayout() {
-      const inputs = document.querySelectorAll('#anchors input');
-      const anchorsMap = {};
-      inputs.forEach(input => {
-        const id = input.dataset.anchorId;
-        const coord = input.dataset.coord;
-        const value = parseFloat(input.value);
-        if (!anchorsMap[id]) {
-          anchorsMap[id] = {id: id, x: 0, y: 0};
-        }
-        anchorsMap[id][coord] = value;
-      });
-      const anchorsArr = Object.values(anchorsMap);
-      const res = await fetch('/api/layout', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({anchors: anchorsArr})
-      });
-      if (res.ok) {
-        statusEl.textContent = 'Saved layout.';
-        anchors = anchorsArr;
-      } else {
-        statusEl.textContent = 'Error saving layout.';
-      }
-    }
-
-    async function pollPose() {
-      const res = await fetch('/api/pose');
-      const data = await res.json();
-      if (data.has_pose) {
-        let maxAbs = computeMaxExtent();
-        maxAbs = Math.max(maxAbs, Math.abs(data.x), Math.abs(data.y)) + 1;
-        drawGrid(maxAbs);
-        drawAnchors();
-        drawTag(data.x, data.y);
-        info.textContent = `Tag ${data.peer_id || ''} at x=${data.x.toFixed(2)} m, y=${data.y.toFixed(2)} m`;
-      } else {
-        info.textContent = 'No pose yet.';
-      }
-    }
-
-    loadLayout();
+    initAnchorsTable();
     setInterval(pollPose, 200);
   </script>
 </body>
