@@ -23,19 +23,20 @@ DEFAULT_LOCALIZER_CONFIG = PROJECT_ROOT / "config" / "uwb_localizer.yaml"
 
 @dataclass
 class AnchorDistances:
-    """accumulate distances for window averaging"""
-    count: int = 0
+    """accumulate distances for window averaging — tracked per anchor"""
+    counts: Dict[str, int] = field(default_factory=dict)
     sum_dists: Dict[str, float] = field(default_factory=dict)
 
     def add(self, source_id: str, dist: float) -> None:
-        self.count += 1
+        self.counts[source_id] = self.counts.get(source_id, 0) + 1  # per-anchor count
         self.sum_dists[source_id] = self.sum_dists.get(source_id, 0.0) + dist
 
     def averages(self) -> Dict[str, float]:
-        if self.count == 0:
-            return {}
-        return {k: v / self.count for k, v in self.sum_dists.items()}
-
+        return {
+            k: self.sum_dists[k] / self.counts[k]  # divide by per-anchor count
+            for k in self.sum_dists
+            if self.counts.get(k, 0) > 0
+        }
 
 def collect_distances(
     endpoint: str,
