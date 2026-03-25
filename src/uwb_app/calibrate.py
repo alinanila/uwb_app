@@ -43,17 +43,67 @@ def collect_distances(
     topic: str,
     duration_s: float,
     peer_id: str,
+    settle_threshold_m: float = 0.05,  # max std dev to consider stable
+    settle_window: int = 20,           # number of readings to check stability over
 ) -> Dict[str, float]:
     """
-    collect average distances for each anchor to the tag in given duration
-    subscribe to 'meas' topic, make sure status=ok
-    return avg dist in m for anchor
+    Wait for distances to stabilise before averaging.
+    Discards approach/motion readings automatically.
     """
     ctx = zmq.Context.instance()
     sub = ctx.socket(zmq.SUB)
     sub.connect(endpoint)
     sub.setsockopt(zmq.SUBSCRIBE, topic.encode("utf-8"))
 
+    # --- Settling phase ---
+    print("  waiting for tag to settle...")
+    recent: Dict[str, list] = {}
+    settled = False
+
+    while not settled:
+        try:
+            parts = sub.recv_multipart(flags=zmq.NOBLOCK)
+        except zmq.Again:
+            time.sleep(0.01)
+            continue
+
+        if len(parts) < 2:
+            continue
+        _, payload = parts
+        try:
+            event = json.loads(payload)
+        except json.JSONDecodeError:
+            continue
+
+        if str(event.get("status", "")) != "Ok":
+            continue
+        if str(event.get("peer_id", "")) != peer_id:
+            continue
+
+        source_id = str(event.get("source_id", ""))
+        dist_raw = event.get("distance_m")
+        if not isinstance(dist_raw, (int, float)):
+            continue
+        dist_m = float(dist_raw)
+        if dist_m <= 0:
+            continue
+
+        buf = recent.setdefault(source_id, [])
+        buf.append(dist_m)
+        if len(buf) > settle_window:
+            buf.pop(0)
+
+        # check all anchors have settled
+        if all(len(v) >= settle_window for v in recent.values()) and len(recent) > 0:
+            stds = [
+                (sum((x - sum(v)/len(v))**2 for x in v) / len(v)) ** 0.5
+                for v in recent.values()
+            ]
+            if all(s < settle_threshold_m for s in stds):
+                settled = True
+                print("  tag settled, accumulating...")
+
+    # --- Accumulation phase (existing logic) ---
     acc = AnchorDistances()
     deadline = time.monotonic() + duration_s
 
@@ -64,30 +114,24 @@ def collect_distances(
             except zmq.Again:
                 time.sleep(0.01)
                 continue
-
             if len(parts) < 2:
                 continue
             _, payload = parts
-
             try:
                 event = json.loads(payload)
             except json.JSONDecodeError:
                 continue
-
             if str(event.get("status", "")) != "Ok":
                 continue
             if str(event.get("peer_id", "")) != peer_id:
                 continue
-
             source_id = str(event.get("source_id", ""))
             dist_raw = event.get("distance_m")
             if not isinstance(dist_raw, (int, float)):
                 continue
-
             dist_m = float(dist_raw)
             if dist_m <= 0:
                 continue
-
             acc.add(source_id, dist_m)
     finally:
         sub.close()
