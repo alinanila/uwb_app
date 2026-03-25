@@ -242,12 +242,16 @@ def index() -> str:
 
     let anchors = [];
     let scale = 60; // pixels per meter (will be recomputed dynamically)
+    let currentBounds = null;  
     const margin = 40; // pixels around the drawing
 
     function worldToCanvas(x, y) {
-      // Center (0,0) in the middle of the canvas, +y up
-      const cx = canvas.width / 2 + x * scale;
-      const cy = canvas.height / 2 - y * scale;
+      // Center the view on the middle of the bounds
+      const centerX = (currentBounds.minX + currentBounds.maxX) / 2;
+      const centerY = (currentBounds.minY + currentBounds.maxY) / 2;
+
+      const cx = canvas.width / 2 + (x - centerX) * scale;
+      const cy = canvas.height / 2 - (y - centerY) * scale;
       return { cx, cy };
     }
 
@@ -290,23 +294,27 @@ def index() -> str:
       const { minX, maxX, minY, maxY } = bounds;
 
       // World width/height in meters
-      const width_m  = Math.max(1, maxX - minX);
-      const height_m = Math.max(1, maxY - minY);
+      const width_m  = maxX - minX;
+      const height_m = maxY - minY;
+
+      // Add padding
+      const padded_width_m  = width_m * 1.2;
+      const padded_height_m = height_m * 1.2;
 
       // Available pixels (minus margins)
       const width_px  = canvas.width  - 2 * margin;
       const height_px = canvas.height - 2 * margin;
 
       // Choose scale so that both dimensions fit
-      const sx = width_px  / width_m;
-      const sy = height_px / height_m;
+      const sx = width_px  / padded_width_m;
+      const sy = height_px / padded_height_m;
 
       // Use the smaller scale to fit both directions
       let s = Math.min(sx, sy);
 
       // Clamp scale to reasonable range
-      const MIN_SCALE = 50;  // 20 px/m (zoomed out)
-      const MAX_SCALE = 300; // 200 px/m (zoomed in)
+      const MIN_SCALE = 10;   // zoomed out
+      const MAX_SCALE = 500;  // zoomed in
       s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
 
       return s;
@@ -376,10 +384,9 @@ def index() -> str:
     }
 
     function computeAndDraw(includeTag) {
-      const bounds = computeBounds(includeTag);
-      scale = computeScale(bounds);
-      console.log("Bounds:", bounds, "scale:", scale);
-      drawGrid(bounds);
+      currentBounds = computeBounds(includeTag);
+      scale = computeScale(currentBounds);
+      drawGrid(currentBounds);
       drawAnchors();
       if (includeTag && lastPose.has_pose) {
         drawTag(lastPose.x, lastPose.y);
