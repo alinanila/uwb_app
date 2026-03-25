@@ -305,8 +305,8 @@ def index() -> str:
       let s = Math.min(sx, sy);
 
       // Clamp scale to reasonable range
-      const MIN_SCALE = 20;  // 20 px/m (zoomed out)
-      const MAX_SCALE = 200; // 200 px/m (zoomed in)
+      const MIN_SCALE = 50;  // 20 px/m (zoomed out)
+      const MAX_SCALE = 300; // 200 px/m (zoomed in)
       s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
 
       return s;
@@ -378,6 +378,7 @@ def index() -> str:
     function computeAndDraw(includeTag) {
       const bounds = computeBounds(includeTag);
       scale = computeScale(bounds);
+      console.log("Bounds:", bounds, "scale:", scale);
       drawGrid(bounds);
       drawAnchors();
       if (includeTag && lastPose.has_pose) {
@@ -438,7 +439,7 @@ def index() -> str:
       }
     }
 
-    // Populate anchor table (same as before)
+    // Populate anchor table
     async function initAnchorsTable() {
       const res = await fetch('/api/layout');
       if (!res.ok) {
