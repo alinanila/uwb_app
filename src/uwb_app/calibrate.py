@@ -43,19 +43,19 @@ def collect_distances(
     topic: str,
     duration_s: float,
     peer_id: str,
+    expected_ids: set[str] | None = None,
     settle_threshold_m: float = 0.05,  # max std dev to consider stable
     settle_window: int = 20,           # number of readings to check stability over
 ) -> Dict[str, float]:
     """
-    Wait for distances to stabilise before averaging.
-    Discards approach/motion readings automatically.
+    wait for distances to stabilise before averaging
     """
     ctx = zmq.Context.instance()
     sub = ctx.socket(zmq.SUB)
     sub.connect(endpoint)
     sub.setsockopt(zmq.SUBSCRIBE, topic.encode("utf-8"))
 
-    # --- Settling phase ---
+    # settling
     print("  waiting for tag to settle...")
     recent: Dict[str, list] = {}
     settled = False
@@ -94,16 +94,23 @@ def collect_distances(
             buf.pop(0)
 
         # check all anchors have settled
-        if all(len(v) >= settle_window for v in recent.values()) and len(recent) > 0:
+        if expected_ids:
+            ready = all(len(recent.get(a, [])) >= settle_window for a in expected_ids)
+        else:
+            ready = all(len(v) >= settle_window for v in recent.values()) and len(recent) > 0
+
+        if ready:
+            vals = [recent[a] for a in (expected_ids or recent.keys())]
             stds = [
                 (sum((x - sum(v)/len(v))**2 for x in v) / len(v)) ** 0.5
-                for v in recent.values()
+                for v in vals
             ]
+
             if all(s < settle_threshold_m for s in stds):
                 settled = True
                 print("  tag settled, accumulating...")
 
-    # --- Accumulation phase (existing logic) ---
+    # accumulating
     acc = AnchorDistances()
     deadline = time.monotonic() + duration_s
 
@@ -136,7 +143,13 @@ def collect_distances(
     finally:
         sub.close()
 
-    return acc.averages()
+    avgs = acc.averages()
+    if expected_ids:
+        missing = sorted(a for a in expected_ids if a not in avgs)
+        if missing:
+            raise RuntimeError(f"missing expected anchors: {missing}")
+        
+    return avgs
 
 
 def solve_bilateration(D_x: float, dist_A: float, dist_D: float) -> tuple[float, float]:
@@ -211,7 +224,7 @@ def main() -> None:
     parser.add_argument(
         "--avg-seconds",
         type=float,
-        default=10.0,
+        default=15.0,
         help="averaging window in seconds at each calibration position (default: %(default)s)",
     )
     args = parser.parse_args()
@@ -223,55 +236,55 @@ def main() -> None:
     print()
 
     # A (0,0)
-    input("place tag on anchor 1 and press enter")
+    input("place tag on anchor A and press enter")
     dists_Apos = collect_distances(
         args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id
     )
-    print("distances at anchor 1:", dists_Apos)
+    print("distances at anchor A:", dists_Apos)
     A = (0.0, 0.0)
 
     # D (dist, 0) (defining the x-axis)
-    input("place tag at anchor 2 and press enter")
+    input("place tag at anchor D and press enter")
     dists_Dpos = collect_distances(
-        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id
+        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:A"}
     )
-    print("distances at anchor 2:", dists_Dpos)
+    print("distances at anchor D:", dists_Dpos)
     # only measure from A
     dist_AD = dists_Dpos.get("ANCHOR:A")
     if dist_AD is None:
         raise RuntimeError(
-            "no distance from anchor 1 when tag at anchor 2; check IDs/config"
+            "no distance from anchor A when tag at anchor D; check IDs/config"
         )
     D = (dist_AD, 0.0)
 
     # solve for C from A and D
-    input("place tag at anchor 3 and press enter")
+    input("place tag at anchor C and press enter")
     dists_Cpos = collect_distances(
-        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id
+        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:A", "ANCHOR:D"}
     )
-    print("distances at anchor 3:", dists_Cpos)
+    print("distances at anchor C:", dists_Cpos)
     # measure from A and D
     dist_AC = dists_Cpos.get("ANCHOR:A")
     dist_DC = dists_Cpos.get("ANCHOR:D")
     if dist_AC is None or dist_DC is None:
         raise RuntimeError(
-            "missing distance from anchor 1 and/or 2; check IDs/config"
+            "missing distance from anchor A and/or D; check IDs/config"
         )
 
     C = solve_bilateration(D_x=D[0], dist_A=dist_AC, dist_D=dist_DC)
 
     # solve for B from A and D (same as C)
-    input("place tag at anchor 4 and press enter")
+    input("place tag at anchor B and press enter")
     dists_Bpos = collect_distances(
-        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id
+        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:A", "ANCHOR:D"}
     )
-    print("distances at anchor 4:", dists_Bpos)
+    print("distances at anchor B:", dists_Bpos)
     # measure from A and D
     dist_AB = dists_Bpos.get("ANCHOR:A")
     dist_DB = dists_Bpos.get("ANCHOR:D")
     if dist_AB is None or dist_DB is None:
         raise RuntimeError(
-            "missing distance from anchor 1 and/or 2; check IDs/config"
+            "missing distance from anchor A and/or D; check IDs/config"
         )
     
     B = solve_bilateration(D_x=D[0], dist_A=dist_AB, dist_D=dist_DB)
