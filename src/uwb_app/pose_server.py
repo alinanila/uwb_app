@@ -32,6 +32,7 @@ class PoseState:
     """shared state for latest pose"""
     x: Optional[float] = None
     y: Optional[float] = None
+    # z: Optional[float] = None
     peer_id: Optional[str] = None
     timestamp: Optional[float] = None
 
@@ -63,6 +64,25 @@ def load_layout(path: Path) -> Dict[str, Tuple[float, float]]:
         anchors[str(source_id)] = (float(pos[0]), float(pos[1]))
     return anchors
 
+# if 3d
+# def load_layout(path: Path) -> Dict[str, Tuple[float, float, float]]:
+#     data = load_yaml_mapping(path)
+#     layout_in = data.get("layout", data)
+#     if not isinstance(layout_in, dict):
+#         raise ValueError("layout must be a mapping")
+#     anchors_in = layout_in.get("anchors", {})
+#     if not isinstance(anchors_in, dict):
+#         raise ValueError("layout.anchors must be a mapping")
+
+#     anchors: Dict[str, Tuple[float, float, float]] = {}
+#     for source_id, pos in anchors_in.items():
+#         if not isinstance(pos, (list, tuple)) or len(pos) not in (2, 3):
+#             raise ValueError(f"anchor {source_id} must be [x, y] or [x, y, z]")
+#         x, y = float(pos[0]), float(pos[1])
+#         z = float(pos[2]) if len(pos) == 3 else 0.0
+#         anchors[str(source_id)] = (x, y, z)
+#     return anchors
+
 
 def save_layout(path: Path, anchors: Dict[str, Tuple[float, float]]) -> None:
     data = load_yaml_mapping(path)
@@ -80,6 +100,25 @@ def save_layout(path: Path, anchors: Dict[str, Tuple[float, float]]) -> None:
 
     with path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, sort_keys=False)
+
+# if 3d
+# def load_layout(path: Path) -> Dict[str, Tuple[float, float, float]]:
+#     data = load_yaml_mapping(path)
+#     layout_in = data.get("layout", data)
+#     if not isinstance(layout_in, dict):
+#         raise ValueError("layout must be a mapping")
+#     anchors_in = layout_in.get("anchors", {})
+#     if not isinstance(anchors_in, dict):
+#         raise ValueError("layout.anchors must be a mapping")
+
+#     anchors: Dict[str, Tuple[float, float, float]] = {}
+#     for source_id, pos in anchors_in.items():
+#         if not isinstance(pos, (list, tuple)) or len(pos) not in (2, 3):
+#             raise ValueError(f"anchor {source_id} must be [x, y] or [x, y, z]")
+#         x, y = float(pos[0]), float(pos[1])
+#         z = float(pos[2]) if len(pos) == 3 else 0.0
+#         anchors[str(source_id)] = (x, y, z)
+#     return anchors
 
 
 def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOPIC) -> None:
@@ -102,6 +141,7 @@ def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOP
 
             x = event.get("x_m")
             y = event.get("y_m")
+            # z = event.get("z_m")
             peer_id = event.get("peer_id")
             ts = event.get("timestamp")
 
@@ -111,6 +151,7 @@ def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOP
             with pose_lock:
                 pose_state.x = float(x)
                 pose_state.y = float(y)
+                # pose_state.z = float(z) if isinstance(z, (int, float)) else None
                 pose_state.peer_id = str(peer_id) if peer_id is not None else None
                 pose_state.timestamp = float(ts) if isinstance(ts, (int, float)) else time.time()
     except Exception as e:
@@ -148,6 +189,7 @@ class Anchor(BaseModel):
     id: str
     x: float
     y: float
+    # z: float = 0.0
 
 
 class LayoutUpdate(BaseModel):
@@ -162,6 +204,7 @@ def api_layout():
     return LayoutUpdate(
         anchors = [
             Anchor(id=aid, x=pos[0], y=pos[1])
+            # Anchor(id=aid, x=pos[0], y=pos[1], z=pos[2])
             for aid, pos in sorted(anchors.items())
         ]
     )
@@ -171,6 +214,7 @@ def api_layout():
 def api_update_layout(update: LayoutUpdate):
     layout_file = get_layout_file()
     anchors = {a.id: (a.x, a.y) for a in update.anchors}
+    # anchors = {a.id: (a.x, a.y, a.z) for a in update.anchors}
     save_layout(layout_file, anchors)
 
     # restart uwb-localize with new layout
@@ -189,6 +233,7 @@ def api_pose():
             "has_pose": True,
             "x": pose_state.x,
             "y": pose_state.y,
+            # "z": pose_state.z,
             "peer_id": pose_state.peer_id,
             "timestamp": pose_state.timestamp,
         }
