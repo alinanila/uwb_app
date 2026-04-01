@@ -50,6 +50,11 @@ class LocalizerCfg:
 class LayoutCfg:
     anchors: dict[str, tuple[float, float]]
 
+# if 3d
+# @dataclass(frozen=True)
+# class LayoutCfg:
+#     anchors: dict[str, tuple[float, float, float]]
+
 
 def load_yaml_mapping(path: Path) -> dict[str, Any]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -137,3 +142,23 @@ def parse_layout_cfg(data: dict[str, Any]) -> LayoutCfg:
     if len(anchors) < 3:
         raise ValueError("Layout must define at least 3 anchors")
     return LayoutCfg(anchors=anchors)
+
+# if 3d
+# def parse_layout_cfg(data: dict[str, Any]) -> LayoutCfg:
+#     layout_in = data.get("layout", data)
+#     anchors_in = layout_in.get("anchors", {}) if isinstance(layout_in, dict) else {}
+#     if not isinstance(anchors_in, dict):
+#         raise ValueError("layout.anchors must be a mapping")
+
+#     anchors: dict[str, tuple[float, float, float]] = {}
+#     for source_id, pos in anchors_in.items():
+#         if not isinstance(pos, (list, tuple)) or len(pos) not in (2, 3):
+#             raise ValueError(f"Anchor {source_id} must be [x, y] or [x, y, z]")
+#         x, y = float(pos[0]), float(pos[1])
+#         z = float(pos[2]) if len(pos) == 3 else 0.0
+#         anchors[str(source_id)] = (x, y, z)
+
+#     if len(anchors) < 3:
+#         raise ValueError("Layout must define at least 3 anchors")
+#     return LayoutCfg(anchors=anchors)
+    
