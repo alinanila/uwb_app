@@ -3,13 +3,21 @@
 A prototype system to aid visually impaired stage performers navigate a theatre environment using a UWB Real-Time Localisation System (RTLS).
 
 ## To Do
+* Integration with [Dell](https://github.com/Dell-S/stage-support/tree/main)
 * Moving average for smoothing tag position
-* Add 3D capability - at least one anchor needs to be non-planar for z-localisation to be possible
-    - A at (0, 0, 0)
-    - D at (d<sub>AD</sub>, 0, 0)
-    - C at $$ \left( \frac{x_2^2 + d_{31}^2 - d_{32}^2}{2x_2},\ \sqrt{d_{31}^2 - x_3^2},\ 0 \right) $$
-    - B at $$ 
-* IMU integration for orientation and possible Kalman filtering
+* Add 3D capability
+    - Possible implementations for this added to `calibration.py`, `local_apps_config.py`, `localize.py`, and `pose_server.py`, need to uncomment code there and test
+    - `uwb_localizer.yaml` layout updated to include z-coordinates, this needs to be manually changed on Pi D
+* IMU integration for orientation and possible Kalman filtering for a better fix than moving average
+* Bluetooth, either from Pi D, or from an MCU worn on the performer, depends which will be easier and more reliable
+* Buttons
+    - Right now the systemd services handle ranging, hub and localiser, these start automatically
+    - Calibration still being run manually over SSH, would be good to get this activated by a button interrupt and guided with TTS audio
+    - Physical button for reloading localiser after updating the web server, rather than letting it run sudo?
+* Integration with Haptics
+* CAD for packaging
+    - Think about how to design this so that all the stupid wires are contained well
+    - Make sure the packaging for the anchors and the tag (if designing something for it) or conducive to calibration - some kind of notch that the tag can fit to so that the antennas are aligned and the tag doesn't move about
 
 
 ## Hardware
@@ -207,6 +215,7 @@ To run any service manually (e.g. for testing), stop the systemd service first t
 ## Known Issues
 
 - The tag may time-out and stop ranging with the anchors after about 5 minutes. Power cycle the tag for a temporary fix. Cause is as of yet undetermined.
+- When all the anchors are powered on, they run fine, but if an anchor is then turned off and powered on again, while other anchors remain on, another instance of `uwb-agent` will begin to run alongside the original one on that anchor. This is annoying, but can be fixed by power cycling all the anchors, so that they are all 'starting fresh'. Not a robust fix, but works. Cause is as of yet undetermined.
 - The tag draws a very small current (~0.05 A maximum spike when polling with anchors first begins). If powering it with a regular power bank via USB, the power bank may automatically turn off after a short period of time. Restart the power bank/power cycle the tag for a temporary fix.
 - Errors in anchor calibration can be on the scale of 1 m. This is likely due to the current localisation process, which performs no filtering on the tag position.
 - Tag position jumps a large amount between readings, see above.
