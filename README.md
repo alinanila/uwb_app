@@ -18,6 +18,7 @@ A prototype system to aid visually impaired stage performers navigate a theatre 
 * CAD for packaging
     - Think about how to design this so that all the stupid wires are contained well
     - Make sure the packaging for the anchors and the tag (if designing something for it) or conducive to calibration - some kind of notch that the tag can fit to so that the antennas are aligned and the tag doesn't move about
+* Diagram for system overview/data flow (and calibration layout? should be the same)
 
 
 ## Hardware
@@ -48,8 +49,6 @@ The original repo is itself based on the **DW3xxx & QM3xxx SDK v1.1.1**, which a
 | Anchor D Pi | `uwb-agent`, `uwb-hub`, `uwb-localize`, `uwb-server` |
 
 **Data flow:**
-
-**to do** - diagram of hardware and data flow
 
     DWM3001CDK -> uwb-agent (each Pi)
                       | ZMQ PUB tcp://<pi-ip>:5556
