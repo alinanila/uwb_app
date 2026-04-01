@@ -88,6 +88,77 @@ def _solve_2d_position(
     return (x, y)
 
 
+def _solve_3d_position(
+    anchor_positions: dict[str, tuple[float, float, float]],
+    distances: dict[str, float],
+    *,
+    max_iterations: int = 8,
+) -> tuple[float, float, float] | None:
+    usable = [
+        (anchor_positions[source_id], distance)
+        for source_id, distance in distances.items()
+        if source_id in anchor_positions and distance > 0
+    ]
+    if len(usable) < 4:
+        return None
+
+    x = sum(position[0] for position, _ in usable) / len(usable)
+    y = sum(position[1] for position, _ in usable) / len(usable)
+    z = sum(position[2] for position, _ in usable) / len(usable)
+
+    for _ in range(max_iterations):
+        h11 = h12 = h13 = h22 = h23 = h33 = 0.0
+        g1 = g2 = g3 = 0.0
+        for (ax, ay, az), measured in usable:
+            dx = x - ax
+            dy = y - ay
+            dz = z - az
+            predicted = math.sqrt(dx*dx + dy*dy + dz*dz)
+            if predicted < 1e-9:
+                continue
+            residual = predicted - measured
+            jx = dx / predicted
+            jy = dy / predicted
+            jz = dz / predicted
+            h11 += jx * jx
+            h12 += jx * jy
+            h13 += jx * jz
+            h22 += jy * jy
+            h23 += jy * jz
+            h33 += jz * jz
+            g1 += jx * residual
+            g2 += jy * residual
+            g3 += jz * residual
+
+        # 3x3 matrix inverse via cofactors
+        det = (
+            h11 * (h22 * h33 - h23 * h23)
+            - h12 * (h12 * h33 - h23 * h13)
+            + h13 * (h12 * h23 - h22 * h13)
+        )
+        if abs(det) < 1e-12:
+            return None
+
+        inv11 = (h22 * h33 - h23 * h23) / det
+        inv12 = -(h12 * h33 - h23 * h13) / det
+        inv13 = (h12 * h23 - h22 * h13) / det
+        inv22 = (h11 * h33 - h13 * h13) / det
+        inv23 = -(h11 * h23 - h13 * h12) / det
+        inv33 = (h11 * h22 - h12 * h12) / det
+
+        step_x = inv11 * g1 + inv12 * g2 + inv13 * g3
+        step_y = inv12 * g1 + inv22 * g2 + inv23 * g3
+        step_z = inv13 * g1 + inv23 * g2 + inv33 * g3
+        x -= step_x
+        y -= step_y
+        z -= step_z
+
+        if math.sqrt(step_x**2 + step_y**2 + step_z**2) < 1e-6:
+            break
+
+    return (x, y, z)
+
+
 class PosePublisher:
     def __init__(self, cfg: LocalizerCfg) -> None:
         import zmq
@@ -220,12 +291,14 @@ class Localizer:
         exemplar_event: dict[str, object],
     ) -> None:
         solved = _solve_2d_position(self.layout.anchors, state.measurements)
+        # solved = _solve_3d_position(self.layout.anchors, state.measurements)
         if solved is None:
             self._dropped_incomplete += 1
             self._remove_state(key, state)
             return
 
         x_m, y_m = solved
+        # x_m, y_m, z_m = solved
         out_event: dict[str, object] = {
             "schema": "uwb.pose",
             "schema_version": 1,
@@ -238,6 +311,7 @@ class Localizer:
             "peer_id": key[1],
             "x_m": x_m,
             "y_m": y_m,
+            # "z_m": z_m
             "anchors_used": sorted(state.measurements.keys()),
             "n_anchors": len(state.measurements),
             "debug": {
@@ -253,6 +327,7 @@ class Localizer:
                 "POSE "
                 f"peer={out_event['peer_id']} round_seq={out_event['round_seq']} "
                 f"x={x_m:.3f} y={y_m:.3f} n={out_event['n_anchors']}"
+                # f"x={x_m:.3f} y={y_m:.3f} z={z_m:.3f} n={out_event['n_anchors']}"
             )
         if self._publisher is not None:
             self._publisher.publish(out_event)
