@@ -213,7 +213,7 @@ To run any service manually (e.g. for testing), stop the systemd service first t
 
 ## Known Issues
 
-- The tag may time-out and stop ranging with the anchors after about 5 minutes. Power cycle the tag for a temporary fix. Cause is as of yet undetermined.
+- After ~5 minutes, the tag will time-out, and the `uwb-agent` logs will show: `status=RangingRxTimeout dist=NA`. This appears to be an issue with the CLI firmware provided by Qorvo, although the exact problem is unlcear. This could possibly be circumvented by using the UCI firmware, which appears to be much more robust. However, for this system that would require hardcoding an autonomous mode, which was the reason for using the CLI firmware in the first place. Power cycle the tag for a temporary fix, but this is a deeper issue with the chosen hardware.
 - When all the anchors are powered on, they run fine, but if an anchor is then turned off and powered on again, while other anchors remain on, another instance of `uwb-agent` will begin to run alongside the original one on that anchor. This is annoying, but can be fixed by power cycling all the anchors, so that they are all 'starting fresh'. Not a robust fix, but works. Cause is as of yet undetermined.
 - The tag draws a very small current (~0.05 A maximum spike when polling with anchors first begins). If powering it with a regular power bank via USB, the power bank may automatically turn off after a short period of time. Restart the power bank/power cycle the tag for a temporary fix.
 - Errors in anchor calibration can be on the scale of 1 m. This is likely due to the current localisation process, which performs no filtering on the tag position.
