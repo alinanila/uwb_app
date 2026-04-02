@@ -537,7 +537,7 @@ def index() -> str:
     }
 
     initAnchorsTable();
-    setInterval(pollPose, 200);
+    setInterval(pollPose, 100);
   </script>
 </body>
 </html>
