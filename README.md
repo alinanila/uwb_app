@@ -9,7 +9,7 @@ A prototype system to aid visually impaired stage performers navigate a theatre 
     - Possible implementations for this added to `calibration.py`, `local_apps_config.py`, `localize.py`, and `pose_server.py`, need to uncomment code there and test
     - `uwb_localizer.yaml` layout updated to include z-coordinates, this needs to be manually changed on Pi D
 * IMU integration for orientation and possible Kalman filtering for a better fix than moving average
-* Bluetooth, either from Pi D, or from an MCU worn on the performer, depends which will be easier and more reliable
+* Bluetooth TTS audio, either from Pi D, or from an MCU worn on the performer, depends which will be easier and more reliable
 * Buttons
     - Right now the systemd services handle ranging, hub and localiser, these start automatically
     - Calibration still being run manually over SSH, would be good to get this activated by a button interrupt and guided with TTS audio
@@ -17,7 +17,7 @@ A prototype system to aid visually impaired stage performers navigate a theatre 
 * Integration with Haptics
 * CAD for packaging
     - Think about how to design this so that all the stupid wires are contained well
-    - Make sure the packaging for the anchors and the tag (if designing something for it) or conducive to calibration - some kind of notch that the tag can fit to so that the antennas are aligned and the tag doesn't move about
+    - Make sure the packaging for the anchors and the tag (if designing something for it) are conducive to calibration - some kind of notch that the tag can fit to so that the antennas are aligned and the tag doesn't move about
 * Diagram for system overview/data flow (and calibration layout? should be the same)
 
 
