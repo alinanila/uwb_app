@@ -8,6 +8,8 @@ A prototype system to aid visually impaired stage performers navigate a theatre 
 * Add 3D capability
     - Possible implementations for this added to `calibration.py`, `local_apps_config.py`, `localize.py`, and `pose_server.py`, need to uncomment code there and test
     - `uwb_localizer.yaml` layout updated to include z-coordinates, this needs to be manually changed on Pi D
+* Try powering the tag via LiPo
+    - Might fix the tag time-out error, will need to solder a JST header on J1 to test
 * IMU integration for orientation and possible Kalman filtering for a better fix than moving average
 * Bluetooth TTS audio, either from Pi D, or from an MCU worn on the performer, depends which will be easier and more reliable
 * Buttons
