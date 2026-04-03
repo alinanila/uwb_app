@@ -184,6 +184,17 @@ def startup_event() -> None:
     t = threading.Thread(target=pose_listener, daemon=True)
     t.start()
 
+    # print anchor layout on startup
+    try:
+        layout_file = get_layout_file()
+        anchors = load_layout(layout_file)
+        print("\nanchor layout:")
+        for aid, pos in sorted(anchors.items()):
+            print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f}")
+        print()
+    except Exception as e:
+        print(f"could not load anchor layout on startup: {e}")
+
 
 class Anchor(BaseModel):
     id: str
@@ -217,6 +228,12 @@ def api_update_layout(update: LayoutUpdate):
     # anchors = {a.id: (a.x, a.y, a.z) for a in update.anchors}
     save_layout(layout_file, anchors)
 
+    # print updated anchor layout
+    print("\nupdated anchor layout:")
+    for a in sorted(update.anchors, key=lambda a: a.id):
+        print(f"  {a.id} = x={a.x:.3f} y={a.y:.3f}")
+    print()
+    
     # restart uwb-localize with new layout
     restart_localizer_service()
 
