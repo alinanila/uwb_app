@@ -6,8 +6,8 @@ A prototype system to aid visually impaired stage performers navigate a theatre 
 * Integration with [Dell](https://github.com/Dell-S/stage-support/tree/main)
 * Moving average for smoothing tag position
 * Add 3D capability
-    - Possible implementations for this added to `calibration.py`, `local_apps_config.py`, `localize.py`, and `pose_server.py`, need to uncomment code there and test
-    - `uwb_localizer.yaml` layout updated to include z-coordinates, this needs to be manually changed on Pi D
+    - `localize.py`: choose 2D or 3D position filter, comment lines as appropriate in `Localizer._emit_round`
+    - `calibrate.py`: use either bilateration (2D) or trilateration (3D) for anchor B
 * Try powering the tag via LiPo
     - Might fix the tag time-out error, will need to solder a JST header on J1 to test
 * IMU integration for orientation and possible Kalman filtering for a better fix than moving average
@@ -216,6 +216,7 @@ To run any service manually (e.g. for testing), stop the systemd service first t
 ## Known Issues
 
 - After ~5 minutes, the tag will time-out, and the `uwb-agent` logs will show: `status=RangingRxTimeout dist=NA`. This appears to be an issue with the CLI firmware provided by Qorvo, although the exact problem is unlcear. This could possibly be circumvented by using the UCI firmware, which appears to be much more robust. However, for this system that would require hardcoding an autonomous mode, which was the reason for using the CLI firmware in the first place. Power cycle the tag for a temporary fix, but this is a deeper issue with the chosen hardware.
+    - Issue was potentially just the cable?? Would be fixed by LiPo anyway.
 - When all the anchors are powered on, they run fine, but if an anchor is then turned off and powered on again, while other anchors remain on, another instance of `uwb-agent` will begin to run alongside the original one on that anchor. This is annoying, but can be fixed by power cycling all the anchors, so that they are all 'starting fresh'. Not a robust fix, but works. Cause is as of yet undetermined.
 - The tag draws a very small current (~0.05 A maximum spike when polling with anchors first begins). If powering it with a regular power bank via USB, the power bank may automatically turn off after a short period of time. Restart the power bank/power cycle the tag for a temporary fix.
 - Errors in anchor calibration can be on the scale of 1 m. This is likely due to the current localisation process, which performs no filtering on the tag position.
