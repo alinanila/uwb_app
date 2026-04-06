@@ -156,7 +156,7 @@ def solve_bilateration(
     D_x: float, 
     dist_A: float, 
     dist_D: float
-) -> tuple[float, float]:
+) -> tuple[float, float, float]:        # if doing 3d, three floats in the tuple
     """
     solve for x,y (anchor C specifically)
     assuming A = (0,0) and D = (D_x,0) to define the x-axis
@@ -168,8 +168,8 @@ def solve_bilateration(
         y_sq = 0.0
     y = math.sqrt(y_sq)
     z = 0.0
-    # return x, y, z, need to add another float to tuple return in definition
-    return x, y
+    return x, y, z
+    # return x, y 
 
 
 def solve_trilateration(
@@ -197,8 +197,8 @@ def solve_trilateration(
 
 def update_layout(
     config_path: Path,
-    anchors_out: Dict[str, tuple[float, float]],
-    # anchors_out: Dict [str, tuple[float, float, float]],
+    # anchors_out: Dict[str, tuple[float, float]],
+    anchors_out: Dict [str, tuple[float, float, float]],
 ) -> None:
     """
     update anchor layout in uwb_localizer.yaml with calibrated layout
@@ -219,11 +219,11 @@ def update_layout(
     anchors = layout.setdefault("anchors", {})
 
     # set new anchor positions
-    for source_id, (x, y) in anchors_out.items():
-        anchors[source_id] = [float(x), float(y)]
+    # for source_id, (x, y) in anchors_out.items():
+    #     anchors[source_id] = [float(x), float(y)]
 
-    # for source_id, (x, y, z) in anchors_out.items():
-    #     anchors[source_id] = [float(x), float(y), float(z)]
+    for source_id, (x, y, z) in anchors_out.items():
+        anchors[source_id] = [float(x), float(y), float(z)]
 
     with target_path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, sort_keys=False)
@@ -275,8 +275,8 @@ def main() -> None:
         args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id
     )
     print("distances at anchor A:", dists_Apos)
-    A = (0.0, 0.0)
-    # A = (0.0, 0.0, 0.0)
+    # A = (0.0, 0.0)
+    A = (0.0, 0.0, 0.0)
 
     # D (dist, 0) (defining the x-axis)
     input("place tag at anchor D and press enter")
@@ -290,8 +290,8 @@ def main() -> None:
         raise RuntimeError(
             "no distance from anchor A when tag at anchor D; check IDs/config"
         )
-    D = (dist_AD, 0.0)
-    # D = (dist_AD, 0.0, 0.0)
+    # D = (dist_AD, 0.0)
+    D = (dist_AD, 0.0, 0.0)
 
     # solve for C from A and D
     input("place tag at anchor C and press enter")
@@ -312,8 +312,8 @@ def main() -> None:
     # solve for B from A and D (same as C)
     input("place tag at anchor B and press enter")
     dists_Bpos = collect_distances(
-        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:A", "ANCHOR:D"}
-        # args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:A", "ANCHOR:D", "ANCHOR:C"}
+        # args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:A", "ANCHOR:D"}
+        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:A", "ANCHOR:D", "ANCHOR:C"}
     )
     print("distances at anchor B:", dists_Bpos)
     # measure from A and D
@@ -325,8 +325,8 @@ def main() -> None:
             "missing distance from anchor A and/or D and/or C; check IDs/config"
         )
     
-    B = solve_bilateration(D_x=D[0], dist_A=dist_AB, dist_D=dist_DB)
-    # B = solve_trilateration(D_x=D[0], C_x=C[0], C_y=C[1], dist_A=dist_AB, dist_D=dist_DB, dist_C=dist_CB)
+    # B = solve_bilateration(D_x=D[0], dist_A=dist_AB, dist_D=dist_DB)
+    B = solve_trilateration(D_x=D[0], C_x=C[0], C_y=C[1], dist_A=dist_AB, dist_D=dist_DB, dist_C=dist_CB)
 
     print("\n calibrated anchor positions:")
     print(f"ANCHOR:A = {A}")

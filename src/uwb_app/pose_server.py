@@ -32,7 +32,7 @@ class PoseState:
     """shared state for latest pose"""
     x: Optional[float] = None
     y: Optional[float] = None
-    # z: Optional[float] = None
+    z: Optional[float] = None
     peer_id: Optional[str] = None
     timestamp: Optional[float] = None
 
@@ -48,24 +48,7 @@ def get_layout_file(config_path: Path = DEFAULT_LOCALIZER_CONFIG) -> Path:
     return config_path
 
 
-def load_layout(path: Path) -> Dict[str, Tuple[float, float]]:
-    data = load_yaml_mapping(path)
-    layout_in = data.get("layout", data)
-    if not isinstance(layout_in, dict):
-        raise ValueError("layout must be a mapping")
-    anchors_in = layout_in.get("anchors", {})
-    if not isinstance(anchors_in, dict):
-        raise ValueError("layout.anchors must be a mapping")
-
-    anchors: Dict[str, Tuple[float, float]] = {}
-    for source_id, pos in anchors_in.items():
-        if not isinstance(pos, (list, tuple)) or len(pos) != 2:
-            raise ValueError(f"anchor {source_id} must be [x, y]")
-        anchors[str(source_id)] = (float(pos[0]), float(pos[1]))
-    return anchors
-
-# if 3d
-# def load_layout(path: Path) -> Dict[str, Tuple[float, float, float]]:
+# def load_layout(path: Path) -> Dict[str, Tuple[float, float]]:
 #     data = load_yaml_mapping(path)
 #     layout_in = data.get("layout", data)
 #     if not isinstance(layout_in, dict):
@@ -74,17 +57,52 @@ def load_layout(path: Path) -> Dict[str, Tuple[float, float]]:
 #     if not isinstance(anchors_in, dict):
 #         raise ValueError("layout.anchors must be a mapping")
 
-#     anchors: Dict[str, Tuple[float, float, float]] = {}
+#     anchors: Dict[str, Tuple[float, float]] = {}
 #     for source_id, pos in anchors_in.items():
-#         if not isinstance(pos, (list, tuple)) or len(pos) not in (2, 3):
-#             raise ValueError(f"anchor {source_id} must be [x, y] or [x, y, z]")
-#         x, y = float(pos[0]), float(pos[1])
-#         z = float(pos[2]) if len(pos) == 3 else 0.0
-#         anchors[str(source_id)] = (x, y, z)
+#         if not isinstance(pos, (list, tuple)) or len(pos) != 2:
+#             raise ValueError(f"anchor {source_id} must be [x, y]")
+#         anchors[str(source_id)] = (float(pos[0]), float(pos[1]))
 #     return anchors
 
+# if 3d
+def load_layout(path: Path) -> Dict[str, Tuple[float, float, float]]:
+    data = load_yaml_mapping(path)
+    layout_in = data.get("layout", data)
+    if not isinstance(layout_in, dict):
+        raise ValueError("layout must be a mapping")
+    anchors_in = layout_in.get("anchors", {})
+    if not isinstance(anchors_in, dict):
+        raise ValueError("layout.anchors must be a mapping")
 
-def save_layout(path: Path, anchors: Dict[str, Tuple[float, float]]) -> None:
+    anchors: Dict[str, Tuple[float, float, float]] = {}
+    for source_id, pos in anchors_in.items():
+        if not isinstance(pos, (list, tuple)) or len(pos) not in (2, 3):
+            raise ValueError(f"anchor {source_id} must be [x, y] or [x, y, z]")
+        x, y = float(pos[0]), float(pos[1])
+        z = float(pos[2]) if len(pos) == 3 else 0.0
+        anchors[str(source_id)] = (x, y, z)
+    return anchors
+
+
+# def save_layout(path: Path, anchors: Dict[str, Tuple[float, float]]) -> None:
+#     data = load_yaml_mapping(path)
+#     layout = data.setdefault("layout", {})
+#     if not isinstance(layout, dict):
+#         raise ValueError(f"layout in {path} must be a mapping")
+
+#     anchors_out = layout.get("anchors")
+#     if not isinstance(anchors_out, dict):
+#         anchors_out = {}
+#         layout["anchors"] = anchors_out
+
+#     for source_id, (x, y) in anchors.items():
+#         anchors_out[source_id] = [float(x), float(y)]
+
+#     with path.open("w", encoding="utf-8") as f:
+#         yaml.safe_dump(data, f, sort_keys=False)
+
+# if 3d
+def save_layout(path: Path, anchors: Dict[str, Tuple[float, float, float]]) -> None:
     data = load_yaml_mapping(path)
     layout = data.setdefault("layout", {})
     if not isinstance(layout, dict):
@@ -95,29 +113,11 @@ def save_layout(path: Path, anchors: Dict[str, Tuple[float, float]]) -> None:
         anchors_out = {}
         layout["anchors"] = anchors_out
 
-    for source_id, (x, y) in anchors.items():
-        anchors_out[source_id] = [float(x), float(y)]
+    for source_id, (x, y, z) in anchors.items():
+        anchors_out[source_id] = [float(x), float(y), float(z)]
 
     with path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, sort_keys=False)
-
-# if 3d
-# def save_layout(path: Path, anchors: Dict[str, Tuple[float, float, float]]) -> None:
-#     data = load_yaml_mapping(path)
-#     layout = data.setdefault("layout", {})
-#     if not isinstance(layout, dict):
-#         raise ValueError(f"layout in {path} must be a mapping")
-#
-#     anchors_out = layout.get("anchors")
-#     if not isinstance(anchors_out, dict):
-#         anchors_out = {}
-#         layout["anchors"] = anchors_out
-#
-#     for source_id, (x, y, z) in anchors.items():
-#         anchors_out[source_id] = [float(x), float(y), float(z)]
-#
-#     with path.open("w", encoding="utf-8") as f:
-#         yaml.safe_dump(data, f, sort_keys=False)
 
 
 def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOPIC) -> None:
@@ -140,7 +140,7 @@ def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOP
 
             x = event.get("x_m")
             y = event.get("y_m")
-            # z = event.get("z_m")
+            z = event.get("z_m")
             peer_id = event.get("peer_id")
             ts = event.get("timestamp")
 
@@ -150,7 +150,7 @@ def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOP
             with pose_lock:
                 pose_state.x = float(x)
                 pose_state.y = float(y)
-                # pose_state.z = float(z) if isinstance(z, (int, float)) else None
+                pose_state.z = float(z) if isinstance(z, (int, float)) else None
                 pose_state.peer_id = str(peer_id) if peer_id is not None else None
                 pose_state.timestamp = float(ts) if isinstance(ts, (int, float)) else time.time()
     except Exception as e:
@@ -189,7 +189,8 @@ def startup_event() -> None:
         anchors = load_layout(layout_file)
         print("\nanchor layout:")
         for aid, pos in sorted(anchors.items()):
-            print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f}")
+            # print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f}")
+            print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f} z={pos[2]:.3f}")
         print()
     except Exception as e:
         print(f"could not load anchor layout on startup: {e}")
@@ -199,7 +200,7 @@ class Anchor(BaseModel):
     id: str
     x: float
     y: float
-    # z: float = 0.0
+    z: float = 0.0
 
 
 class LayoutUpdate(BaseModel):
@@ -213,8 +214,8 @@ def api_layout():
     anchors = load_layout(layout_file)
     return LayoutUpdate(
         anchors = [
-            Anchor(id=aid, x=pos[0], y=pos[1])
-            # Anchor(id=aid, x=pos[0], y=pos[1], z=pos[2])
+            # Anchor(id=aid, x=pos[0], y=pos[1])
+            Anchor(id=aid, x=pos[0], y=pos[1], z=pos[2])
             for aid, pos in sorted(anchors.items())
         ]
     )
@@ -223,8 +224,8 @@ def api_layout():
 @app.post("/api/layout")
 def api_update_layout(update: LayoutUpdate):
     layout_file = get_layout_file()
-    anchors = {a.id: (a.x, a.y) for a in update.anchors}
-    # anchors = {a.id: (a.x, a.y, a.z) for a in update.anchors}
+    # anchors = {a.id: (a.x, a.y) for a in update.anchors}
+    anchors = {a.id: (a.x, a.y, a.z) for a in update.anchors}
     save_layout(layout_file, anchors)
 
     # print updated anchor layout
@@ -249,7 +250,7 @@ def api_pose():
             "has_pose": True,
             "x": pose_state.x,
             "y": pose_state.y,
-            # "z": pose_state.z,
+            "z": pose_state.z,
             "peer_id": pose_state.peer_id,
             "timestamp": pose_state.timestamp,
         }
@@ -281,7 +282,7 @@ def index() -> str:
       <h2>Anchor Layout</h2>
       <table id="anchors">
         <thead>
-          <tr><th>Anchor ID</th><th>X (m)</th><th>Y (m)</th></tr>
+          <tr><th>Anchor ID</th><th>X (m)</th><th>Y (m)</th><th>Z (m)</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -476,7 +477,7 @@ def index() -> str:
         const coord = input.dataset.coord;
         const value = parseFloat(input.value);
         if (!anchorsMap[id]) {
-          anchorsMap[id] = {id: id, x: 0, y: 0};
+          anchorsMap[id] = {id: id, x: 0, y: 0, z: 0};
         }
         anchorsMap[id][coord] = value;
       });
@@ -501,7 +502,8 @@ def index() -> str:
       if (data.has_pose) {
         lastPose = data;
         draw();
-        info.textContent = `Tag ${data.peer_id || ''} at x=${data.x.toFixed(2)} m, y=${data.y.toFixed(2)} m`;
+        const zStr = data.z != null ? `, z=${data.z.toFixed(2)} m` : '';
+        info.textContent = `Tag ${data.peer_id || ''} at x=${data.x.toFixed(2)} m, y=${data.y.toFixed(2)} m${zStr}`;
       } else {
         info.textContent = 'No pose yet.';
       }
@@ -545,6 +547,16 @@ def index() -> str:
         inputY.dataset.coord = 'y';
         tdY.appendChild(inputY);
         tr.appendChild(tdY);
+
+        const tdZ = document.createElement('td');
+        const inputZ = document.createElement('input');
+        inputZ.type = 'number';
+        inputZ.step = '0.01';
+        inputZ.value = a.z ?? 0;
+        inputZ.dataset.anchorId = a.id;
+        inputZ.dataset.coord = 'z';
+        tdZ.appendChild(inputZ);
+        tr.appendChild(tdZ);
 
         tbody.appendChild(tr);
       });

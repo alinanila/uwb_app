@@ -191,43 +191,43 @@ class PosePublisher:
         self._socket.close()
 
 
-class PositionFilter:
-    """
-    per-anchor rolling average over the last window_size solved positions
-    """
-    def __init__(self, window_size: int = 5) -> None:
-        self._window_size = window_size
-        self._buffers: dict[str, deque[tuple[float, float]]] = {}
-
-    def update(self, peer_label: str, x: float, y: float) -> tuple[float, float]:
-        buf = self._buffers.setdefault(peer_label, deque(maxlen=self._window_size))
-        buf.append((x, y))
-        avg_x = sum(p[0] for p in buf) / len(buf)
-        avg_y = sum(p[1] for p in buf) / len(buf)
-        return avg_x, avg_y
-
-    def reset(self, peer_label: str) -> None:
-        self._buffers.pop(peer_label, None)
-
-# for 3d
 # class PositionFilter:
 #     """
 #     per-anchor rolling average over the last window_size solved positions
 #     """
 #     def __init__(self, window_size: int = 5) -> None:
 #         self._window_size = window_size
-#         self._buffers: dict[str, deque[tuple[float, float, float]]] = {}
+#         self._buffers: dict[str, deque[tuple[float, float]]] = {}
 
-#     def update(self, peer_label: str, x: float, y: float, z: float) -> tuple[float, float, float]:
+#     def update(self, peer_label: str, x: float, y: float) -> tuple[float, float]:
 #         buf = self._buffers.setdefault(peer_label, deque(maxlen=self._window_size))
-#         buf.append((x, y, z))
+#         buf.append((x, y))
 #         avg_x = sum(p[0] for p in buf) / len(buf)
 #         avg_y = sum(p[1] for p in buf) / len(buf)
-#         avg_z = sum(p[2] for p in buf) / len(buf)
-#         return avg_x, avg_y, avg_z
+#         return avg_x, avg_y
 
 #     def reset(self, peer_label: str) -> None:
 #         self._buffers.pop(peer_label, None)
+
+# for 3d
+class PositionFilter:
+    """
+    per-anchor rolling average over the last window_size solved positions
+    """
+    def __init__(self, window_size: int = 5) -> None:
+        self._window_size = window_size
+        self._buffers: dict[str, deque[tuple[float, float, float]]] = {}
+
+    def update(self, peer_label: str, x: float, y: float, z: float) -> tuple[float, float, float]:
+        buf = self._buffers.setdefault(peer_label, deque(maxlen=self._window_size))
+        buf.append((x, y, z))
+        avg_x = sum(p[0] for p in buf) / len(buf)
+        avg_y = sum(p[1] for p in buf) / len(buf)
+        avg_z = sum(p[2] for p in buf) / len(buf)
+        return avg_x, avg_y, avg_z
+
+    def reset(self, peer_label: str) -> None:
+        self._buffers.pop(peer_label, None)
 
 
 class Localizer:
@@ -331,8 +331,8 @@ class Localizer:
         state: RoundState,
         exemplar_event: dict[str, object],
     ) -> None:
-        solved = _solve_2d_position(self.layout.anchors, state.measurements)
-        # solved = _solve_3d_position(self.layout.anchors, state.measurements)
+        # solved = _solve_2d_position(self.layout.anchors, state.measurements)
+        solved = _solve_3d_position(self.layout.anchors, state.measurements)
         if solved is None:
             self._dropped_incomplete += 1
             self._remove_state(key, state)
@@ -340,10 +340,10 @@ class Localizer:
 
         # moving average
         peer_label = key[1]
-        x_raw, y_raw = solved
-        # x_raw, y_raw, z_raw = solved
-        x_m, y_m = self._position_filter.update(peer_label, x_raw, y_raw)
-        # x_m, y_m, z_m = self._position_filter.update(peer_label, x_raw, y_raw, z_raw)
+        # x_raw, y_raw = solved
+        x_raw, y_raw, z_raw = solved
+        # x_m, y_m = self._position_filter.update(peer_label, x_raw, y_raw)
+        x_m, y_m, z_m = self._position_filter.update(peer_label, x_raw, y_raw, z_raw)
         
         out_event: dict[str, object] = {
             "schema": "uwb.pose",
@@ -357,7 +357,7 @@ class Localizer:
             "peer_id": key[1],
             "x_m": x_m,
             "y_m": y_m,
-            # "z_m": z_m
+            "z_m": z_m,
             # add raw values for debugging if needed
             "anchors_used": sorted(state.measurements.keys()),
             "n_anchors": len(state.measurements),
@@ -373,8 +373,8 @@ class Localizer:
             print(
                 "POSE "
                 f"peer={out_event['peer_id']} round_seq={out_event['round_seq']} "
-                f"x={x_m:.3f} y={y_m:.3f} n={out_event['n_anchors']}"
-                # f"x={x_m:.3f} y={y_m:.3f} z={z_m:.3f} n={out_event['n_anchors']}"
+                # f"x={x_m:.3f} y={y_m:.3f} n={out_event['n_anchors']}"
+                f"x={x_m:.3f} y={y_m:.3f} z={z_m:.3f} n={out_event['n_anchors']}"
                 # print raw values if needed
             )
         if self._publisher is not None:
