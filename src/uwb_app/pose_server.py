@@ -102,23 +102,22 @@ def save_layout(path: Path, anchors: Dict[str, Tuple[float, float]]) -> None:
         yaml.safe_dump(data, f, sort_keys=False)
 
 # if 3d
-# def load_layout(path: Path) -> Dict[str, Tuple[float, float, float]]:
+# def save_layout(path: Path, anchors: Dict[str, Tuple[float, float, float]]) -> None:
 #     data = load_yaml_mapping(path)
-#     layout_in = data.get("layout", data)
-#     if not isinstance(layout_in, dict):
-#         raise ValueError("layout must be a mapping")
-#     anchors_in = layout_in.get("anchors", {})
-#     if not isinstance(anchors_in, dict):
-#         raise ValueError("layout.anchors must be a mapping")
-
-#     anchors: Dict[str, Tuple[float, float, float]] = {}
-#     for source_id, pos in anchors_in.items():
-#         if not isinstance(pos, (list, tuple)) or len(pos) not in (2, 3):
-#             raise ValueError(f"anchor {source_id} must be [x, y] or [x, y, z]")
-#         x, y = float(pos[0]), float(pos[1])
-#         z = float(pos[2]) if len(pos) == 3 else 0.0
-#         anchors[str(source_id)] = (x, y, z)
-#     return anchors
+#     layout = data.setdefault("layout", {})
+#     if not isinstance(layout, dict):
+#         raise ValueError(f"layout in {path} must be a mapping")
+#
+#     anchors_out = layout.get("anchors")
+#     if not isinstance(anchors_out, dict):
+#         anchors_out = {}
+#         layout["anchors"] = anchors_out
+#
+#     for source_id, (x, y, z) in anchors.items():
+#         anchors_out[source_id] = [float(x), float(y), float(z)]
+#
+#     with path.open("w", encoding="utf-8") as f:
+#         yaml.safe_dump(data, f, sort_keys=False)
 
 
 def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOPIC) -> None:
@@ -287,10 +286,11 @@ def index() -> str:
         <tbody></tbody>
       </table>
       <button onclick="saveLayout()">Save Layout</button>
+      <button onclick="resetView()">Reset View</button>
       <p id="status"></p>
     </div>
     <div>
-      <h2>Visualization</h2>
+      <h2>Visualisation</h2>
       <canvas id="canvas" width="800" height="600"></canvas>
       <p id="info"></p>
     </div>
@@ -303,127 +303,63 @@ def index() -> str:
     const statusEl = document.getElementById('status') || { textContent: "" };
 
     let anchors = [];
-    let scale = 60; // pixels per meter (will be recomputed dynamically)
-    let currentBounds = null;  
-    const margin = 40; // pixels around the drawing
+    let scale = 60;         // pixels per meter - changed by scroll wheel
+    let offsetX = 0;        // pan offset in pixels
+    let offsetY = 0;
+    let isPanning = false;
+    let panStartX = 0;
+    let panStartY = 0;
 
     function worldToCanvas(x, y) {
-      // Center the view on the middle of the bounds
-      const centerX = (currentBounds.minX + currentBounds.maxX) / 2;
-      const centerY = (currentBounds.minY + currentBounds.maxY) / 2;
-
-      const cx = canvas.width / 2 + (x - centerX) * scale;
-      const cy = canvas.height / 2 - (y - centerY) * scale;
-      return { cx, cy };
+        const cx = canvas.width / 2 + (x * scale) + offsetX;
+        const cy = canvas.height / 2 - (y * scale) + offsetY;
+        return { cx, cy };
     }
 
-    function computeBounds(includeTag) {
-      // Compute min/max x,y over anchors (and optionally tag)
-      let minX = 0, maxX = 0, minY = 0, maxY = 0;
-      let initialized = false;
+    function drawGrid() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      anchors.forEach(a => {
-        if (!initialized) {
-          minX = maxX = a.x;
-          minY = maxY = a.y;
-          initialized = true;
-        } else {
-          minX = Math.min(minX, a.x);
-          maxX = Math.max(maxX, a.x);
-          minY = Math.min(minY, a.y);
-          maxY = Math.max(maxY, a.y);
+        // draw enough grid lines to always fill the canvas regardless of pan/zoom
+        const maxExtent = Math.ceil(
+            Math.max(canvas.width, canvas.height) / scale
+        ) + 2;
+
+        ctx.strokeStyle = '#eee';
+        ctx.lineWidth = 1;
+
+        const step = 1;
+        for (let x = -maxExtent; x <= maxExtent; x += step) {
+            const p1 = worldToCanvas(x, -maxExtent);
+            const p2 = worldToCanvas(x,  maxExtent);
+            ctx.beginPath();
+            ctx.moveTo(p1.cx, p1.cy);
+            ctx.lineTo(p2.cx, p2.cy);
+            ctx.stroke();
         }
-      });
+        for (let y = -maxExtent; y <= maxExtent; y += step) {
+            const p1 = worldToCanvas(-maxExtent, y);
+            const p2 = worldToCanvas( maxExtent, y);
+            ctx.beginPath();
+            ctx.moveTo(p1.cx, p1.cy);
+            ctx.lineTo(p2.cx, p2.cy);
+            ctx.stroke();
+        }
 
-      if (!initialized) {
-        // No anchors; default small bounds
-        minX = -1; maxX = 1; minY = -1; maxY = 1;
-      }
-
-      if (includeTag && lastPose.has_pose) {
-        const x = lastPose.x;
-        const y = lastPose.y;
-        minX = Math.min(minX, x);
-        maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
-      }
-
-      return { minX, maxX, minY, maxY };
-    }
-
-    function computeScale(bounds) {
-      const { minX, maxX, minY, maxY } = bounds;
-
-      // World width/height in meters
-      const width_m  = maxX - minX;
-      const height_m = maxY - minY;
-
-      // Add padding
-      const padded_width_m  = width_m * 1.2;
-      const padded_height_m = height_m * 1.2;
-
-      // Available pixels (minus margins)
-      const width_px  = canvas.width  - 2 * margin;
-      const height_px = canvas.height - 2 * margin;
-
-      // Choose scale so that both dimensions fit
-      const sx = width_px  / padded_width_m;
-      const sy = height_px / padded_height_m;
-
-      // Use the smaller scale to fit both directions
-      let s = Math.min(sx, sy);
-
-      // Clamp scale to reasonable range
-      const MIN_SCALE = 10;   // zoomed out
-      const MAX_SCALE = 500;  // zoomed in
-      s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
-
-      return s;
-    }
-
-    function drawGrid(bounds) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const { minX, maxX, minY, maxY } = bounds;
-      const maxExtent = Math.max(Math.abs(minX), Math.abs(maxX), Math.abs(minY), Math.abs(maxY)) + 1;
-
-      ctx.strokeStyle = '#eee';
-      ctx.lineWidth = 1;
-
-      const step = 1; // 1 meter grid
-      for (let x = -maxExtent; x <= maxExtent; x += step) {
-        const p1 = worldToCanvas(x, -maxExtent);
-        const p2 = worldToCanvas(x,  maxExtent);
+        // axes
+        ctx.strokeStyle = '#ccc';
+        ctx.lineWidth = 1.5;
+        let p1 = worldToCanvas(-maxExtent, 0);
+        let p2 = worldToCanvas( maxExtent, 0);
         ctx.beginPath();
         ctx.moveTo(p1.cx, p1.cy);
         ctx.lineTo(p2.cx, p2.cy);
         ctx.stroke();
-      }
-      for (let y = -maxExtent; y <= maxExtent; y += step) {
-        const p1 = worldToCanvas(-maxExtent, y);
-        const p2 = worldToCanvas( maxExtent, y);
+        p1 = worldToCanvas(0, -maxExtent);
+        p2 = worldToCanvas(0,  maxExtent);
         ctx.beginPath();
         ctx.moveTo(p1.cx, p1.cy);
         ctx.lineTo(p2.cx, p2.cy);
         ctx.stroke();
-      }
-
-      // Axes
-      ctx.strokeStyle = '#ccc';
-      ctx.lineWidth = 1.5;
-      let p1 = worldToCanvas(-maxExtent, 0);
-      let p2 = worldToCanvas( maxExtent, 0);
-      ctx.beginPath();
-      ctx.moveTo(p1.cx, p1.cy);
-      ctx.lineTo(p2.cx, p2.cy);
-      ctx.stroke();
-      p1 = worldToCanvas(0, -maxExtent);
-      p2 = worldToCanvas(0,  maxExtent);
-      ctx.beginPath();
-      ctx.moveTo(p1.cx, p1.cy);
-      ctx.lineTo(p2.cx, p2.cy);
-      ctx.stroke();
     }
 
     function drawAnchors() {
@@ -445,17 +381,80 @@ def index() -> str:
       ctx.fill();
     }
 
-    function computeAndDraw(includeTag) {
-      currentBounds = computeBounds(includeTag);
-      scale = computeScale(currentBounds);
-      drawGrid(currentBounds);
-      drawAnchors();
-      if (includeTag && lastPose.has_pose) {
-        drawTag(lastPose.x, lastPose.y);
-      }
+    function draw() {
+        drawGrid();
+        drawAnchors();
+        if (lastPose.has_pose) {
+            drawTag(lastPose.x, lastPose.y);
+        }
+        // draw scale indicator in bottom-left corner
+        const barMetres = 1.0;
+        const barPixels = barMetres * scale;
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(20, canvas.height - 20);
+        ctx.lineTo(20 + barPixels, canvas.height - 20);
+        ctx.stroke();
+        ctx.fillStyle = '#333';
+        ctx.font = '11px sans-serif';
+        ctx.fillText(`${barMetres} m`, 20, canvas.height - 25);
     }
 
     let lastPose = { has_pose: false, x: 0, y: 0, peer_id: null };
+
+    // zoom with scroll wheel — zoom towards cursor position
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+        const rect = canvas.getBoundingClientRect();
+
+        // cursor position relative to canvas centre
+        const mouseX = e.clientX - rect.left - canvas.width / 2;
+        const mouseY = e.clientY - rect.top  - canvas.height / 2;
+
+        // adjust offset so zoom is centred on cursor
+        offsetX = mouseX - (mouseX - offsetX) * zoomFactor;
+        offsetY = mouseY - (mouseY - offsetY) * zoomFactor;
+
+        scale *= zoomFactor;
+
+        // clamp scale to sensible range
+        scale = Math.max(10, Math.min(500, scale));
+        draw();
+    }, { passive: false });
+
+    // pan with click and drag
+    canvas.addEventListener('mousedown', (e) => {
+        isPanning = true;
+        panStartX = e.clientX - offsetX;
+        panStartY = e.clientY - offsetY;
+        canvas.style.cursor = 'grabbing';
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        offsetX = e.clientX - panStartX;
+        offsetY = e.clientY - panStartY;
+        draw();
+    });
+
+    canvas.addEventListener('mouseup', () => {
+        isPanning = false;
+        canvas.style.cursor = 'default';
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+        isPanning = false;
+        canvas.style.cursor = 'default';
+    });
+
+    function resetView() {
+        scale = 60;
+        offsetX = 0;
+        offsetY = 0;
+        draw();
+    }
 
     async function loadLayout() {
       const res = await fetch('/api/layout');
@@ -466,7 +465,7 @@ def index() -> str:
       const data = await res.json();
       anchors = data.anchors || [];
       statusEl.textContent = '';
-      computeAndDraw(false);
+      draw();
     }
 
     async function saveLayout() {
@@ -490,7 +489,7 @@ def index() -> str:
       if (res.ok) {
         statusEl.textContent = 'Saved layout.';
         anchors = anchorsArr;
-        computeAndDraw(true);
+        draw();
       } else {
         statusEl.textContent = 'Error saving layout.';
       }
@@ -501,7 +500,7 @@ def index() -> str:
       const data = await res.json();
       if (data.has_pose) {
         lastPose = data;
-        computeAndDraw(true);
+        draw();
         info.textContent = `Tag ${data.peer_id || ''} at x=${data.x.toFixed(2)} m, y=${data.y.toFixed(2)} m`;
       } else {
         info.textContent = 'No pose yet.';
@@ -550,7 +549,7 @@ def index() -> str:
         tbody.appendChild(tr);
       });
 
-      computeAndDraw(false);
+      draw();
     }
 
     initAnchorsTable();
