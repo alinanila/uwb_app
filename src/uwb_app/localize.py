@@ -384,7 +384,7 @@ class Localizer:
             "peer_id": key[1],
             "x_m": x_m,
             "y_m": y_m,
-            "z_m": z_m,
+            "z_m": z_m,         #comment out for 2D
             # add raw values for debugging if needed
             "anchors_used": sorted(state.measurements.keys()),
             "n_anchors": len(state.measurements),
