@@ -67,7 +67,7 @@ dedup:
 
 # Output sinks. Console output remains enabled by default.
 sinks:
-  console: true
+  console: false
   zmq:
     enabled: true
     endpoint: "tcp://127.0.0.1:5556"
