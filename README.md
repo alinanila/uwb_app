@@ -200,14 +200,14 @@ To run any service manually (e.g. for testing), stop the systemd service first t
 ## Service Management
 
     # Check status
-    sudo systemctl status uwb-agent
-    sudo systemctl status uwb-hub
-    sudo systemctl status uwb-localize
-    sudo systemctl status uwb-server
+    systemctl status uwb-agent
+    systemctl status uwb-hub
+    systemctl status uwb-localize
+    systemctl status uwb-server
 
     # View logs
-    sudo journalctl -u uwb-agent -f
-    sudo journalctl -u uwb-localize -f
+    journalctl -u uwb-agent -f
+    journalctl -u uwb-localize -f
 
     # Restart
     sudo systemctl restart uwb-localize
