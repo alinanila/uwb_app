@@ -288,11 +288,11 @@ def index() -> str:
       <button onclick="saveLayout()">Save Layout</button>
       <button onclick="resetView()">Reset View</button>
       <p id="status"></p>
+      <p id="info"></p>
     </div>
     <div>
       <h2>Visualisation</h2>
       <canvas id="canvas" width="800" height="600"></canvas>
-      <p id="info"></p>
     </div>
   </div>
 
