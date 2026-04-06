@@ -94,6 +94,7 @@ def _solve_3d_position(
     distances: dict[str, float],
     *,
     max_iterations: int = 8,
+    max_step_m: float = 1.0,  # maximum allowed step per iteration in metres
 ) -> tuple[float, float, float] | None:
     usable = [
         (anchor_positions[source_id], distance)
@@ -117,19 +118,23 @@ def _solve_3d_position(
             predicted = math.sqrt(dx*dx + dy*dy + dz*dz)
             if predicted < 1e-9:
                 continue
+
+            # downweight measurements where tag is very close to anchor
+            weight = min(1.0, predicted / 0.3)  # full weight beyond 30cm, reduced within
+            
             residual = predicted - measured
             jx = dx / predicted
             jy = dy / predicted
             jz = dz / predicted
-            h11 += jx * jx
-            h12 += jx * jy
-            h13 += jx * jz
-            h22 += jy * jy
-            h23 += jy * jz
-            h33 += jz * jz
-            g1 += jx * residual
-            g2 += jy * residual
-            g3 += jz * residual
+            h11 += weight * jx * jx
+            h12 += weight * jx * jy
+            h13 += weight * jx * jz
+            h22 += weight * jy * jy
+            h23 += weight * jy * jz
+            h33 += weight * jz * jz
+            g1 += weight * jx * residual
+            g2 += weight * jy * residual
+            g3 += weight * jz * residual
 
         # 3x3 matrix inverse via cofactors
         det = (
@@ -150,6 +155,15 @@ def _solve_3d_position(
         step_x = inv11 * g1 + inv12 * g2 + inv13 * g3
         step_y = inv12 * g1 + inv22 * g2 + inv23 * g3
         step_z = inv13 * g1 + inv23 * g2 + inv33 * g3
+
+        # clamp step magnitude to prevent explosion near singular geometry
+        step_mag = math.sqrt(step_x**2 + step_y**2 + step_z**2)
+        if step_mag > max_step_m:
+            scale = max_step_m / step_mag
+            step_x *= scale
+            step_y *= scale
+            step_z *= scale
+
         x -= step_x
         y -= step_y
         z -= step_z
