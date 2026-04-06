@@ -44,8 +44,7 @@ class LocalizerCfg:
     console: bool = True
     layout_path: str | None = None
     pose_sink: PoseSinkCfg = PoseSinkCfg()
-    filter_alpha: float = 0.3
-    filter_z_alpha: float = 0.15
+    filter_window: int = 5
 
 
 # @dataclass(frozen=True)
@@ -121,8 +120,7 @@ def load_localizer_cfg(path: Path) -> LocalizerCfg:
             sndhwm=int(pose_in.get("sndhwm", 32)),
             linger_ms=int(pose_in.get("linger_ms", 0)),
         ),
-        filter_alpha=float(loc_in.get("filter_alpha", 0.3)),
-        filter_z_alpha=float(loc_in.get("filter_z_alpha", 0.15))
+        filter_window=int(loc_in.get("filter_window", 5)),
     )
 
 
