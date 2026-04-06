@@ -16,7 +16,8 @@ localizer:
     topic: "pose"
     sndhwm: 32
     linger_ms: 0
-  filter_window: 5
+  filter_alpha: 0.3
+  filter_z_alpha: 0.15
 
 # layout:
 #   anchors:

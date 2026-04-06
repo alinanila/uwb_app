@@ -9,7 +9,6 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-from collections import deque
 
 from .local_apps_config import (
     LayoutCfg,
@@ -226,22 +225,31 @@ class PosePublisher:
 # for 3d
 class PositionFilter:
     """
-    per-anchor rolling average over the last window_size solved positions
+    per-anchor exponential moving average
+    lower alpha = smoother but higher lag
+    separate alpha for z as anchor geometry means it's noisier,
+    so heavier smoothing is better and lag is less of an issue
     """
-    def __init__(self, window_size: int = 5) -> None:
-        self._window_size = window_size
-        self._buffers: dict[str, deque[tuple[float, float, float]]] = {}
+    def __init__(self, alpha: float = 0.3, z_alpha: float = 0.15) -> None:
+        self._alpha = alpha
+        self._z_alpha = z_alpha
+        self._smoothed: dict[str, tuple[float, float, float]] = {}
 
     def update(self, peer_label: str, x: float, y: float, z: float) -> tuple[float, float, float]:
-        buf = self._buffers.setdefault(peer_label, deque(maxlen=self._window_size))
-        buf.append((x, y, z))
-        avg_x = sum(p[0] for p in buf) / len(buf)
-        avg_y = sum(p[1] for p in buf) / len(buf)
-        avg_z = sum(p[2] for p in buf) / len(buf)
-        return avg_x, avg_y, avg_z
+        if peer_label not in self._smoothed:
+            # initialise on first reading — no lag on startup
+            self._smoothed[peer_label] = (x, y, z)
+            return x, y, z
+
+        sx, sy, sz = self._smoothed[peer_label]
+        new_x = self._alpha * x + (1.0 - self._alpha) * sx
+        new_y = self._alpha * y + (1.0 - self._alpha) * sy
+        new_z = self._z_alpha * z + (1.0 - self._z_alpha) * sz
+        self._smoothed[peer_label] = (new_x, new_y, new_z)
+        return new_x, new_y, new_z
 
     def reset(self, peer_label: str) -> None:
-        self._buffers.pop(peer_label, None)
+        self._smoothed.pop(peer_label, None)
 
 
 class Localizer:
@@ -266,7 +274,10 @@ class Localizer:
         self._dropped_bad = 0
         self._publisher = PosePublisher(cfg) if cfg.pose_sink.enabled else None
         self._peer_sessions: dict[str, set[int]] = {}
-        self._position_filter = PositionFilter(window_size=cfg.filter_window)
+        self._position_filter = PositionFilter(
+            alpha=cfg.filter_alpha,
+            z_alpha=cfg.filter_z_alpha
+        )
 
     def _process_message(self, payload: bytes, now_mono: float) -> None:
         try:
