@@ -226,22 +226,32 @@ class PosePublisher:
 # for 3d
 class PositionFilter:
     """
-    per-anchor rolling average over the last window_size solved positions
+    per-anchor moving average over the last window_size solved positions
+    larger window for z - noisier and can stand to have more lag
     """
-    def __init__(self, window_size: int = 5) -> None:
+    def __init__(self, window_size: int = 5, z_window_size: int = 15) -> None:
         self._window_size = window_size
-        self._buffers: dict[str, deque[tuple[float, float, float]]] = {}
+        self._z_window_size = z_window_size
+        self._xy_buffers: dict[str, deque[tuple[float, float]]] = {}
+        self._z_buffers: dict[str, deque[float]] = {}
 
     def update(self, peer_label: str, x: float, y: float, z: float) -> tuple[float, float, float]:
-        buf = self._buffers.setdefault(peer_label, deque(maxlen=self._window_size))
-        buf.append((x, y, z))
-        avg_x = sum(p[0] for p in buf) / len(buf)
-        avg_y = sum(p[1] for p in buf) / len(buf)
-        avg_z = sum(p[2] for p in buf) / len(buf)
+        # xy
+        xy_buf = self._xy_buffers.setdefault(peer_label, deque(maxlen=self._window_size))
+        xy_buf.append((x, y))
+        avg_x = sum(p[0] for p in xy_buf) / len(xy_buf)
+        avg_y = sum(p[1] for p in xy_buf) / len(xy_buf)
+
+        # z
+        z_buf = self._z_buffers.setdefault(peer_label, deque(maxlen=self._z_window_size))
+        z_buf.append(z)
+        avg_z = sum(z_buf) / len(z_buf)
+
         return avg_x, avg_y, avg_z
 
     def reset(self, peer_label: str) -> None:
-        self._buffers.pop(peer_label, None)
+        self._xy_buffers.pop(peer_label, None)
+        self._z_buffers.pop(peer_label, None)
 
 
 class Localizer:
@@ -266,7 +276,10 @@ class Localizer:
         self._dropped_bad = 0
         self._publisher = PosePublisher(cfg) if cfg.pose_sink.enabled else None
         self._peer_sessions: dict[str, set[int]] = {}
-        self._position_filter = PositionFilter(window_size=cfg.filter_window)
+        self._position_filter = PositionFilter(
+            window_size=cfg.filter_window,
+            z_window_size=cfg.z_filter_window,
+        )
 
     def _process_message(self, payload: bytes, now_mono: float) -> None:
         try:

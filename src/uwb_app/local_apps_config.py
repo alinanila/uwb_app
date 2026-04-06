@@ -45,6 +45,7 @@ class LocalizerCfg:
     layout_path: str | None = None
     pose_sink: PoseSinkCfg = PoseSinkCfg()
     filter_window: int = 5
+    z_filter_window: int = 15
 
 
 # @dataclass(frozen=True)
@@ -121,6 +122,7 @@ def load_localizer_cfg(path: Path) -> LocalizerCfg:
             linger_ms=int(pose_in.get("linger_ms", 0)),
         ),
         filter_window=int(loc_in.get("filter_window", 5)),
+        z_filter_window=int(loc_in.get("z_filter_window", 15)),
     )
 
 
