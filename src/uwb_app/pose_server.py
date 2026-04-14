@@ -411,30 +411,28 @@ def index() -> str:
       <button onclick="resetView()">Reset View</button>
       <p id="status"></p>
       <p id="info"></p>
-    </div>
-    <div id="sensors">
-    <h2>Sensor Data</h2>
-    <table id="sensor-table" style="border-collapse: collapse;">
+
+      <h2>Sensor Data</h2>
+      <table id="sensor-table" style="border-collapse: collapse;">
         <tbody>
-        <!-- BNO085 -->
-        <tr><td colspan="2" style="padding: 0.3rem 0.6rem; font-weight: bold; background: #f5f5f5;">BNO085</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Rotation Vector</td>       <td id="s-rv"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Game Rotation Vector</td>  <td id="s-grv"      style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Linear Acceleration</td>   <td id="s-la"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Accelerometer</td>         <td id="s-ac"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Gyroscope</td>             <td id="s-gy"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Gravity</td>               <td id="s-gv"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Steps</td>                 <td id="s-steps"    style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Stability</td>             <td id="s-stab"     style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-        <!-- LSM303 -->
-        <tr><td colspan="2" style="padding: 0.3rem 0.6rem; font-weight: bold; background: #f5f5f5;">LSM303</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Magnetometer</td>          <td id="s-mag"      style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Accelerometer</td>         <td id="s-lsm-ac"   style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-        <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Heading</td>               <td id="s-hdg"      style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td colspan="2" style="padding: 0.3rem 0.6rem; font-weight: bold; background: #f5f5f5;">BNO085</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Rotation Vector</td>       <td id="s-rv"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Game Rotation Vector</td>  <td id="s-grv"      style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Linear Acceleration</td>   <td id="s-la"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Accelerometer</td>         <td id="s-ac"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Gyroscope</td>             <td id="s-gy"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Gravity</td>               <td id="s-gv"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Steps</td>                 <td id="s-steps"    style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Stability</td>             <td id="s-stab"     style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td colspan="2" style="padding: 0.3rem 0.6rem; font-weight: bold; background: #f5f5f5;">LSM303</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Magnetometer</td>          <td id="s-mag"      style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Accelerometer</td>         <td id="s-lsm-ac"   style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
+          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Heading</td>               <td id="s-hdg"      style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
         </tbody>
-    </table>
-    <p id="sensor-status" style="color: #666; font-size: 0.9rem;">No sensor data yet.</p>
+      </table>
+      <p id="sensor-status" style="color: #666; font-size: 0.9rem;">No sensor data yet.</p>
     </div>
+    
     <div>
       <h2>Visualisation</h2>
       <canvas id="canvas" width="800" height="600"></canvas>
