@@ -1,23 +1,17 @@
 # Wearable Device for Non-Sighted Stage Navigation
 
-A prototype system to aid visually impaired stage performers navigate a theatre environment using a UWB Real-Time Localisation System (RTLS).
+A prototype system to aid visually impaired stage performers navigate a theatre environment using a UWB Real-Time Localisation System (RTLS). This provides the RTLS for this [stage navigation project](https://github.com/Dell-S/stage-support/tree/main)
 
 ## To Do
-* Integration with [Dell](https://github.com/Dell-S/stage-support/tree/main)
+* Calibrate anchor E better
 * Integration with [wearable](https://github.com/alinanila/uwb_wearable/tree/main)
-* Moving average for smoothing tag position
-* Add 3D capability
-    - `localize.py`: choose 2D or 3D position filter, comment lines as appropriate in `Localizer._emit_round`
-    - `calibrate.py`: use either bilateration (2D) or trilateration (3D) for anchor B
-* Try powering the tag via LiPo
-    - Might fix the tag time-out error, will need to solder a JST header on J1 to test
+* Moving average for smoothing tag positio
 * IMU integration for orientation and possible Kalman filtering for a better fix than moving average
 * Bluetooth TTS audio, either from Pi D, or from an MCU worn on the performer, depends which will be easier and more reliable
 * Buttons
     - Right now the systemd services handle ranging, hub and localiser, these start automatically
     - Calibration still being run manually over SSH, would be good to get this activated by a button interrupt and guided with TTS audio
     - Physical button for reloading localiser after updating the web server, rather than letting it run sudo?
-* Integration with Haptics
 * CAD for packaging
     - Think about how to design this so that all the stupid wires are contained well
     - Make sure the packaging for the anchors and the tag (if designing something for it) are conducive to calibration - some kind of notch that the tag can fit to so that the antennas are aligned and the tag doesn't move about
@@ -30,8 +24,8 @@ List will update as project progresses.
 
 | Component | Quantity |
 |---|:---:|
-| DWM3001CDK | 5 (4 anchors + 1 tag) |
-| Raspberry Pi Zero 2 W | 4 |
+| DWM3001CDK | 6 (5 anchors + 1 tag) |
+| Raspberry Pi Zero 2 W | 5 |
 | GL.iNet Travel Router | 1 |
 
 ## System Overview
@@ -49,6 +43,7 @@ The original repo is itself based on the **DW3xxx & QM3xxx SDK v1.1.1**, which a
 | Anchor A Pi | `uwb-agent` |
 | Anchor B Pi | `uwb-agent` |
 | Anchor C Pi | `uwb-agent` |
+| Anchor E Pi | `uwb-agent` |
 | Anchor D Pi | `uwb-agent`, `uwb-hub`, `uwb-localize`, `uwb-server` |
 
 **Data flow:**
@@ -80,7 +75,7 @@ On each Pi, clone the repo, create the Hatch environment and install services:
     cd uwb_app
     hatch env create
 
-**On Anchor A, B, C Pis** (agent only): `./systemd/install_services.sh agent`
+**On Anchor A, B, C, E Pis** (agent only): `./systemd/install_services.sh agent`
 
 **On Anchor D Pi** (all services): `./systemd/install_services.sh all`
 
@@ -125,6 +120,7 @@ Set the IP addresses of all four anchor Pis:
         - "tcp://192.168.x.x:5556"   # Anchor B
         - "tcp://192.168.x.x:5556"   # Anchor C
         - "tcp://127.0.0.1:5556"     # Anchor D (local)
+        - "tcp://192.168.x.x:5556"   # Anchor E
 
 ### `config/uwb_localizer.yaml` - run on Anchor D Pi only
 
@@ -136,6 +132,7 @@ Anchor positions are set here under `layout.anchors`. These are updated automati
         ANCHOR:B: [0.0, 3.0]
         ANCHOR:C: [4.0, 3.0]
         ANCHOR:D: [4.0, 0.0]
+        ANCHOR:E: [4.0, 0.0]
 
 ### Tag configuration
 
@@ -155,7 +152,7 @@ Calibration measures the real physical positions of the anchors automatically us
 
 The anchor layout is defined as follows, with A at the origin and D on the x-axis:
 
-    C -------- B
+    B ---C---- E
     |          |
     A -------- D  ->  x
 
@@ -163,7 +160,7 @@ Run the following on the Anchor D Pi:
 
     hatch run uwb-calibrate --config config/uwb_localizer.yaml
 
-Follow the prompts - place the tag on each anchor in order (A -> D -> C -> B) and press Enter. The script waits for readings to stabilise before averaging, then writes the computed positions back to `uwb_localizer.yaml` automatically.
+Follow the prompts - place the tag on each anchor in order (A -> D -> C -> B -> E) and press Enter. The script waits for readings to stabilise before averaging, then writes the computed positions back to `uwb_localizer.yaml` automatically.
 
 Restart the localizer to apply:
 
