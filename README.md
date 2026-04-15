@@ -4,6 +4,7 @@ A prototype system to aid visually impaired stage performers navigate a theatre 
 
 ## To Do
 * Integration with [Dell](https://github.com/Dell-S/stage-support/tree/main)
+* Integration with [wearable](https://github.com/alinanila/uwb_wearable/tree/main)
 * Moving average for smoothing tag position
 * Add 3D capability
     - `localize.py`: choose 2D or 3D position filter, comment lines as appropriate in `Localizer._emit_round`
