@@ -73,6 +73,7 @@ sinks:
   console: false
   zmq:
     enabled: true
+    # endpoint 0.0.0.0:5556 for all anchors other than D, which publishes locally
     endpoint: "tcp://127.0.0.1:5556"
     # bind=true for local agent/publisher. Set false to connect to a remote broker.
     bind: true
