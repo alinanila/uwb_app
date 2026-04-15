@@ -73,10 +73,11 @@ The original repo is itself based on the **DW3xxx & QM3xxx SDK v1.1.1**, which a
 
 ## Installation
 
-On each Pi, clone the repo and install services:
+On each Pi, clone the repo, create the Hatch environment and install services:
 
     git clone https://github.com/alinanila/uwb_app.git
     cd uwb_app
+    hatch env create
 
 **On Anchor A, B, C Pis** (agent only): `./systemd/install_services.sh agent`
 
