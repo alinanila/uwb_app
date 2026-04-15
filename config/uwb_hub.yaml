@@ -6,6 +6,7 @@ hub:
     - "tcp://192.168.8.102:5556" # anchor B agent PUB
     - "tcp://192.168.8.103:5556" # anchor C agent PUB
     - "tcp://127.0.0.1:5556"     # anchor D agent PUB (local)
+    - "tcp://192.168.8.105:5556" # anchor C agent PUB
   upstream_topic: "meas"
   downstream_endpoint: "tcp://127.0.0.1:5560"
   downstream_bind: true

@@ -39,7 +39,7 @@ class LocalizerCfg:
     batch_timeout_s: float = 0.25
     round_join_window_s: float = 0.06
     max_round_age_s: float = 1.0
-    min_anchors: int = 4
+    min_anchors: int = 5
     total_anchors: int | None = None
     console: bool = True
     layout_path: str | None = None
@@ -105,7 +105,7 @@ def load_localizer_cfg(path: Path) -> LocalizerCfg:
         batch_timeout_s=float(loc_in.get("batch_timeout_s", 0.25)),
         round_join_window_s=float(loc_in.get("round_join_window_s", 0.06)),
         max_round_age_s=float(loc_in.get("max_round_age_s", 1.0)),
-        min_anchors=max(3, int(loc_in.get("min_anchors", 4))),
+        min_anchors=max(4, int(loc_in.get("min_anchors", 5))),
         total_anchors=(
             max(1, int(loc_in["total_anchors"]))
             if loc_in.get("total_anchors") is not None

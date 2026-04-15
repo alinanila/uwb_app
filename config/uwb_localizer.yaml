@@ -7,7 +7,7 @@ localizer:
   batch_timeout_s: 0.25
   max_round_age_s: 1.0
   min_anchors: 4
-  total_anchors: 4
+  total_anchors: 5
   console: true
   pose_zmq:
     enabled: true
@@ -33,3 +33,4 @@ layout:
     ANCHOR:B: [0.0, 3.0, 2.0]
     ANCHOR:C: [4.0, 3.0, 0.0]
     ANCHOR:D: [4.0, 0.0, 0.0]
+    ANCHOR:E: [2.0, 5.0, 1.5]

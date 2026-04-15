@@ -195,6 +195,97 @@ def solve_trilateration(
     return x, y, z
 
 
+def solve_from_anchors(
+    known_anchors: Dict[str, tuple[float, float, float]],
+    distances: Dict[str, float],
+    max_iterations: int = 50,
+    max_step_m: float = 1.0,
+) -> tuple[float, float, float]:
+    """
+    solve for 3d position of new anchor given distances to all known anchors
+    uses gauss-newton — same approach as the localiser
+    requires at least 4 known anchors with valid distances
+    """
+    usable = [
+        (known_anchors[aid], distances[aid])
+        for aid in distances
+        if aid in known_anchors and distances[aid] > 0
+    ]
+    if len(usable) < 4:
+        raise RuntimeError(
+            f"need at least 4 anchor distances to solve 3D position, got {len(usable)}"
+        )
+
+    # initialise at centroid of known anchors
+    x = sum(p[0] for p, _ in usable) / len(usable)
+    y = sum(p[1] for p, _ in usable) / len(usable)
+    z = sum(p[2] for p, _ in usable) / len(usable)
+
+    for _ in range(max_iterations):
+        h11 = h12 = h13 = h22 = h23 = h33 = 0.0
+        g1 = g2 = g3 = 0.0
+
+        for (ax, ay, az), measured in usable:
+            dx = x - ax
+            dy = y - ay
+            dz = z - az
+            predicted = math.sqrt(dx*dx + dy*dy + dz*dz)
+            if predicted < 1e-9:
+                continue
+
+            weight = min(1.0, predicted / 0.3)
+            residual = predicted - measured
+            jx = dx / predicted
+            jy = dy / predicted
+            jz = dz / predicted
+
+            h11 += weight * jx * jx
+            h12 += weight * jx * jy
+            h13 += weight * jx * jz
+            h22 += weight * jy * jy
+            h23 += weight * jy * jz
+            h33 += weight * jz * jz
+            g1  += weight * jx * residual
+            g2  += weight * jy * residual
+            g3  += weight * jz * residual
+
+        det = (
+            h11 * (h22 * h33 - h23 * h23)
+            - h12 * (h12 * h33 - h23 * h13)
+            + h13 * (h12 * h23 - h22 * h13)
+        )
+        if abs(det) < 1e-12:
+            raise RuntimeError("singular matrix during solve — check anchor geometry")
+
+        inv11 = (h22 * h33 - h23 * h23) / det
+        inv12 = -(h12 * h33 - h23 * h13) / det
+        inv13 = (h12 * h23 - h22 * h13) / det
+        inv22 = (h11 * h33 - h13 * h13) / det
+        inv23 = -(h11 * h23 - h13 * h12) / det
+        inv33 = (h11 * h22 - h12 * h12) / det
+
+        step_x = inv11 * g1 + inv12 * g2 + inv13 * g3
+        step_y = inv12 * g1 + inv22 * g2 + inv23 * g3
+        step_z = inv13 * g1 + inv23 * g2 + inv33 * g3
+
+        # clamp step size
+        step_mag = math.sqrt(step_x**2 + step_y**2 + step_z**2)
+        if step_mag > max_step_m:
+            scale = max_step_m / step_mag
+            step_x *= scale
+            step_y *= scale
+            step_z *= scale
+
+        x -= step_x
+        y -= step_y
+        z -= step_z
+
+        if math.sqrt(step_x**2 + step_y**2 + step_z**2) < 1e-6:
+            break
+
+    return (x, y, z)
+
+
 def update_layout(
     config_path: Path,
     # anchors_out: Dict[str, tuple[float, float]],
@@ -309,7 +400,7 @@ def main() -> None:
 
     C = solve_bilateration(D_x=D[0], dist_A=dist_AC, dist_D=dist_DC)
 
-    # solve for B from A and D (same as C)
+    # solve for B from A, C, D
     input("place tag at anchor B and press enter")
     dists_Bpos = collect_distances(
         # args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:A", "ANCHOR:D"}
@@ -328,17 +419,31 @@ def main() -> None:
     # B = solve_bilateration(D_x=D[0], dist_A=dist_AB, dist_D=dist_DB)
     B = solve_trilateration(D_x=D[0], C_x=C[0], C_y=C[1], dist_A=dist_AB, dist_D=dist_DB, dist_C=dist_CB)
 
-    print("\n calibrated anchor positions:")
-    print(f"ANCHOR:A = {A}")
-    print(f"ANCHOR:D = {D}")
-    print(f"ANCHOR:C = {C}")
-    print(f"ANCHOR:B = {B}")
+    # solve for E from all 4 known anchors
+    input("place tag at anchor E and press enter")
+    dists_Epos = collect_distances(
+        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id,
+        {"ANCHOR:A", "ANCHOR:B", "ANCHOR:C", "ANCHOR:D"}
+    )
+    print("distances at anchor E:", dists_Epos)
+
+    known_anchors = {
+        "ANCHOR:A": A,
+        "ANCHOR:B": B,
+        "ANCHOR:C": C,
+        "ANCHOR:D": D,
+    }
+
+    E = solve_from_anchors(known_anchors, dists_Epos)
+
+    print(f"ANCHOR:E = {E}")
 
     anchors_out = {
         "ANCHOR:A": A,
         "ANCHOR:B": B,
         "ANCHOR:C": C,
         "ANCHOR:D": D,
+        "ANCHOR:E": E,
     }
     update_layout(args.config, anchors_out)
 

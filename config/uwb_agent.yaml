@@ -17,7 +17,7 @@ fira:
   multi_node_mode: onetomany
   slot_duration: 2400
   ranging_interval: 30
-  slots_per_rr: 12
+  slots_per_rr: 14
   hopping_mode: disabled
   aoa_report: all-enabled
   max_measurements: 0
@@ -57,6 +57,9 @@ anchors:
   # - id: "D"
   #   port: "/dev/ttyACM0"
   #   mac: 0x0004
+  # - id: "E"
+  #   port: "/dev/ttyACM0"
+  #   mac: 0x0005
 
 # Optional dedup for listen=both. Applied per device to avoid dropping
 # legitimate measurements from multiple anchors.
