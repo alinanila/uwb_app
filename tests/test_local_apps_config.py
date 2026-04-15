@@ -15,7 +15,7 @@ def test_load_localizer_cfg_and_embedded_layout() -> None:
     cfg = load_localizer_cfg(Path("config/uwb_localizer.yaml"))
     assert cfg.subscribe_topic == "meas"
     assert cfg.min_anchors == 4
-    assert cfg.total_anchors == 4
+    assert cfg.total_anchors == 5
 
     layout = parse_layout_cfg(
         {
