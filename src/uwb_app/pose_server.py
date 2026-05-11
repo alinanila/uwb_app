@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import subprocess
 import socket
+import uvicorn
 
 from .local_apps_config import (
     load_localizer_cfg, 
@@ -375,6 +376,10 @@ def api_sensors():
                 "heading":       sensor_state.lsm_heading,
             },
         }
+
+
+def main() -> None:
+      uvicorn.run("uwb_app.pose_server:app", host="0.0.0.0", port=8000)
 
 
 @app.get("/", response_class=HTMLResponse)
