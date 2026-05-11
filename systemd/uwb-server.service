@@ -6,7 +6,7 @@ Requires=uwb-localize.service
 [Service]
 User=localuwb
 WorkingDirectory=/home/localuwb/uwb_app
-ExecStart=/home/localuwb/.local/share/hatch/env/virtual/uwb-app/oIQVJ1UC/uwb-app/bin/uvicorn uwb_app.pose_server:app --host 0.0.0.0 --port 8000
+ExecStart=/home/localuwb/.local/bin/hatch run uwb-server
 Restart=always
 RestartSec=2
 
