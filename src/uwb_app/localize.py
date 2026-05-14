@@ -56,7 +56,8 @@ def _solve_2d_position(
     for _ in range(max_iterations):
         h11 = h12 = h22 = 0.0
         g1 = g2 = 0.0
-        for (ax, ay, az), measured in usable:
+        for position, measured in usable:
+            ax, ay = position[0], position[1]  # works with both (x,y) and (x,y,z)
             dx = x - ax
             dy = y - ay
             predicted = math.hypot(dx, dy)
@@ -75,9 +76,9 @@ def _solve_2d_position(
         if abs(det) < 1e-12:
             return None
 
-        inv11 = h22 / det
+        inv11 =  h22 / det
         inv12 = -h12 / det
-        inv22 = h11 / det
+        inv22 =  h11 / det
         step_x = (inv11 * g1) + (inv12 * g2)
         step_y = (inv12 * g1) + (inv22 * g2)
         x -= step_x
