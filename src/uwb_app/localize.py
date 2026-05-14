@@ -209,20 +209,53 @@ class PosePublisher:
 class PositionFilter:
     """
     per-anchor rolling average over the last window_size solved positions
+    can switch between simple moving and exponential average at runtime with set_type()
     """
-    def __init__(self, window_size: int = 5) -> None:
+    def __init__(self, filter_type:str ="sma", window_size: int = 5, alpha: float = 0.3) -> None:
+        self._filter_type = filter_type.lower()
         self._window_size = window_size
-        self._buffers: dict[str, deque[tuple[float, float]]] = {}
+        self._alpha = alpha
+        self._sma_buffers: dict[str, deque[tuple[float, float]]] = {}
+        self._ema_state: dict[str, tuple[float, float]] = {}
+
+    def set_type(self, filter_type: str) -> None:
+        self._filter_type = filter_type.lower()
+        self._sma_buffers.clear()
+        self._ema_state.clear()     # clear buffers and state
+
+    def set_window(self, window_size: int) -> None:
+        self._window_size = window_size
+        self._sma_buffers.clear()
+
+    def set_alpha(self, alpha: float) -> None:
+        self._alpha = alpha
+        self._ema_state.clear()
 
     def update(self, peer_label: str, x: float, y: float) -> tuple[float, float]:
-        buf = self._buffers.setdefault(peer_label, deque(maxlen=self._window_size))
-        buf.append((x, y))
+        if self.filter_type == "ema":
+            return self._update_ema(peer_label, x, y)
+        return self._update_sma(peer_label, x, y)
+    
+    def _update_sma(self, peer_label: str, x: float, y: float) -> tuple[float, float]:
+        buf = self._sma_buffers.setdefault(peer_label, deque(maxlen=self._window_size))
+        buf.append((x,y))
         avg_x = sum(p[0] for p in buf) / len(buf)
         avg_y = sum(p[1] for p in buf) / len(buf)
         return avg_x, avg_y
+    
+    def _update_ema(self, peer_label: str, x: float, y: float) -> tuple[float, float]:
+        if peer_label not in self._ema_state:
+            self._ema_state[peer_label] = (x,y)
+            return (x,y)
+        sx, sy = self._ema_state[peer_label]
+        new_x = self._alpha * x + (1.0 - self._alpha) * sx
+        new_y = self._alpha * y + (1.0 - self._alpha) * sy
+        self._ema_state[peer_label] = (new_x, new_y)
+        return new_x, new_y
 
     def reset(self, peer_label: str) -> None:
-        self._buffers.pop(peer_label, None)
+        self._sma_buffers.pop(peer_label, None)
+        self._ema_state.pop(peer_label, None)
 
 # for 3d
 # class PositionFilter:
@@ -278,7 +311,9 @@ class Localizer:
         self._publisher = PosePublisher(cfg) if cfg.pose_sink.enabled else None
         self._peer_sessions: dict[str, set[int]] = {}
         self._position_filter = PositionFilter(
+            filter_type=cfg.filter_type,
             window_size=cfg.filter_window,
+            alpha=cfg.filter_alpha,
             #z_window_size=cfg.z_filter_window,
         )
 

@@ -53,9 +53,15 @@ class SensorState:
     bno_steps: Optional[int] = None
     bno_stability: Optional[int] = None
     # LSM303
-    lsm_magnetometer: Optional[dict] = None
-    lsm_accelerometer: Optional[dict] = None
-    lsm_heading: Optional[float] = None
+    # lsm_magnetometer: Optional[dict] = None
+    # lsm_accelerometer: Optional[dict] = None
+    # lsm_heading: Optional[float] = None
+
+@dataclass
+class FilterState:
+    filter_type: str = "sma"
+    filter_window: int = 5
+    filter_alpha: float = 0.3
 
 sensor_state = SensorState()
 sensor_lock = threading.Lock()
@@ -64,6 +70,9 @@ SENSOR_UDP_PORT = 5570
 
 pose_state = PoseState()
 pose_lock = threading.Lock()
+
+filter_state = FilterState()
+filter_lock = threading.Lock()
 
 
 def get_layout_file(config_path: Path = DEFAULT_LOCALIZER_CONFIG) -> Path:
@@ -240,9 +249,9 @@ def sensor_listener(
             sensor_state.bno_gravity              = bno.get("gravity")
             sensor_state.bno_steps                = bno.get("steps")
             sensor_state.bno_stability            = bno.get("stability")
-            sensor_state.lsm_magnetometer         = lsm.get("magnetometer")
-            sensor_state.lsm_accelerometer        = lsm.get("accelerometer")
-            sensor_state.lsm_heading              = lsm.get("heading")
+            # sensor_state.lsm_magnetometer         = lsm.get("magnetometer")
+            # sensor_state.lsm_accelerometer        = lsm.get("accelerometer")
+            # sensor_state.lsm_heading              = lsm.get("heading")
 
         # republish over ZMQ
         try:
@@ -284,11 +293,22 @@ def startup_event() -> None:
         anchors = load_layout(layout_file)
         print("\nanchor layout:")
         for aid, pos in sorted(anchors.items()):
-            # print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f}")
-            print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f} z={pos[2]:.3f}")
+            print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f}")
+            # print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f} z={pos[2]:.3f}")
         print()
     except Exception as e:
         print(f"could not load anchor layout on startup: {e}")
+
+    # load current filter config
+    try:
+        data = load_yaml_mapping(DEFAULT_LOCALIZER_CONFIG)
+        loc = data.get("localizer", {})
+        with filter_lock:
+            filter_state.filter_type = str(loc.get("filter_type", "sma"))
+            filter_state.filter_window = int(loc.get("filter_window", 5))
+            filter_state.filter_alpha = float(loc.get("filter_alpha", 0.3))
+    except Exception as e:
+        print(f"could not load filter config on startup: {e}")
 
 
 class Anchor(BaseModel):
@@ -300,6 +320,12 @@ class Anchor(BaseModel):
 
 class LayoutUpdate(BaseModel):
     anchors: List[Anchor]
+
+
+class FilterUpdate(BaseModel):
+    filter_type: str
+    filter_window: int
+    filter_alpha: float
 
 
 @app.get("/api/layout")
@@ -370,12 +396,52 @@ def api_sensors():
                 "steps":                sensor_state.bno_steps,
                 "stability":            sensor_state.bno_stability,
             },
-            "lsm303": {
-                "magnetometer":  sensor_state.lsm_magnetometer,
-                "accelerometer": sensor_state.lsm_accelerometer,
-                "heading":       sensor_state.lsm_heading,
-            },
+            # "lsm303": {
+            #     "magnetometer":  sensor_state.lsm_magnetometer,
+            #     "accelerometer": sensor_state.lsm_accelerometer,
+            #     "heading":       sensor_state.lsm_heading,
+            # },
         }
+
+
+@app.get("/api/filter")
+def api_get_filter():
+    with filter_lock:
+        return {
+            "filter_type": filter_state.filter_type,
+            "filter_window": filter_state.filter_window,
+            "filter_alpha": filter_state.filter_alpha,
+        }
+    
+
+@app.post("/api/filter")
+def api_update_filter(update: FilterUpdate):
+    if update.filter_type not in ("sma", "ema"):
+        raise HTTPException(status_code=400, detail="filter_type must be 'sma' or 'ema'")
+    if update.filter_window < 1:
+        raise HTTPException(status_code=400, detail="filter_window must be >= 1")
+    if not (0.0 < update.filter_alpha <= 1.0):
+        raise HTTPException(status_code=400, detail="filter_alpha must be between 0 and 1")
+    
+    with filter_lock:
+        filter_state.filter_type = update.filter_type
+        filter_state.filter_window = update.filter_window
+        filter_state.filter_alpha = update.filter_alpha
+    
+    # write to yaml and restart localizer
+    config_path = DEFAULT_LOCALIZER_CONFIG
+    data = load_yaml_mapping(config_path)
+    loc = data.setdefault("localizer", {})
+    loc["filter_type"]   = update.filter_type
+    loc["filter_window"] = update.filter_window
+    loc["filter_alpha"]  = update.filter_alpha
+    with config_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, sort_keys=False)
+
+    print(f"\nfilter updated: type={update.filter_type} window={update.filter_window} alpha={update.filter_alpha}\n")
+    restart_localizer_service()
+
+    return {"status": "ok"}
 
 
 def main() -> None:
@@ -417,6 +483,35 @@ def index() -> str:
       <p id="status"></p>
       <p id="info"></p>
 
+      <h2>Filter Settings</h2>
+      <table style="border-collapse: collapse;">
+      <tbody>
+          <tr>
+          <td style="padding: 0.3rem 0.6rem; color: #666;">Type</td>
+          <td style="padding: 0.3rem 0.6rem;">
+              <select id="filter-type" style="padding: 0.2rem;">
+              <option value="sma">SMA — Simple Moving Average</option>
+              <option value="ema">EMA — Exponential Moving Average</option>
+              </select>
+          </td>
+          </tr>
+          <tr id="row-window">
+          <td style="padding: 0.3rem 0.6rem; color: #666;">Window (SMA)</td>
+          <td style="padding: 0.3rem 0.6rem;">
+              <input id="filter-window" type="number" min="1" max="50" step="1" value="5" style="width: 5rem;" />
+          </td>
+          </tr>
+          <tr id="row-alpha">
+          <td style="padding: 0.3rem 0.6rem; color: #666;">Alpha (EMA)</td>
+          <td style="padding: 0.3rem 0.6rem;">
+              <input id="filter-alpha" type="number" min="0.01" max="1.0" step="0.01" value="0.3" style="width: 5rem;" />
+          </td>
+          </tr>
+      </tbody>
+      </table>
+      <button onclick="saveFilter()">Save Filter</button>
+      <p id="filter-status" style="color: #666; font-size: 0.9rem;"></p>
+
       <h2>Sensor Data</h2>
       <table id="sensor-table" style="border-collapse: collapse;">
         <tbody>
@@ -429,10 +524,6 @@ def index() -> str:
           <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Gravity</td>               <td id="s-gv"       style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
           <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Steps</td>                 <td id="s-steps"    style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
           <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Stability</td>             <td id="s-stab"     style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-          <tr><td colspan="2" style="padding: 0.3rem 0.6rem; font-weight: bold; background: #f5f5f5;">LSM303</td></tr>
-          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Magnetometer</td>          <td id="s-mag"      style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Accelerometer</td>         <td id="s-lsm-ac"   style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
-          <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Heading</td>               <td id="s-hdg"      style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
         </tbody>
       </table>
       <p id="sensor-status" style="color: #666; font-size: 0.9rem;">No sensor data yet.</p>
@@ -682,7 +773,6 @@ def index() -> str:
         }
 
         const bno = data.bno085 || {};
-        const lsm = data.lsm303 || {};
 
         // BNO085
         const rv = bno.rotation_vector;
@@ -704,16 +794,66 @@ def index() -> str:
             ? `${bno.stability} (${stabilityLabels[bno.stability] || '?'})`
             : '—';
 
-        // LSM303
-        document.getElementById('s-mag').textContent    = fmt3(lsm.magnetometer,  'uT');
-        document.getElementById('s-lsm-ac').textContent = fmt3(lsm.accelerometer, 'm/s²');
-        document.getElementById('s-hdg').textContent    = lsm.heading != null
-            ? `${lsm.heading.toFixed(1)} deg`
-            : '—';
-
         document.getElementById('sensor-status').textContent =
             `device: ${data.device_id || '?'}  t=${data.timestamp != null ? data.timestamp.toFixed(3) : '?'}s`;
     }
+
+    const filterStatusEl = document.getElementById('filter-status');
+
+    function updateFilterVisibility() {
+        const type = document.getElementById('filter-type').value;
+        document.getElementById('row-window').style.display = type === 'sma' ? '' : 'none';
+        document.getElementById('row-alpha').style.display  = type === 'ema' ? '' : 'none';
+    }
+
+    // show/hide relevant inputs when type changes
+    document.getElementById('filter-type').addEventListener('change', updateFilterVisibility);
+
+    async function loadFilter() {
+        const res = await fetch('/api/filter');
+        if (!res.ok) {
+            filterStatusEl.textContent = 'Error loading filter settings';
+            return;
+        }
+        const data = await res.json();
+        document.getElementById('filter-type').value   = data.filter_type;
+        document.getElementById('filter-window').value = data.filter_window;
+        document.getElementById('filter-alpha').value  = data.filter_alpha;
+        updateFilterVisibility();
+    }
+
+    async function saveFilter() {
+        const filter_type   = document.getElementById('filter-type').value;
+        const filter_window = parseInt(document.getElementById('filter-window').value);
+        const filter_alpha  = parseFloat(document.getElementById('filter-alpha').value);
+
+        if (isNaN(filter_window) || filter_window < 1) {
+            filterStatusEl.textContent = 'Window must be >= 1';
+            return;
+        }
+        if (isNaN(filter_alpha) || filter_alpha <= 0 || filter_alpha > 1) {
+            filterStatusEl.textContent = 'Alpha must be between 0 and 1';
+            return;
+        }
+
+        filterStatusEl.textContent = 'Saving...';
+        const res = await fetch('/api/filter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filter_type, filter_window, filter_alpha })
+        });
+
+        if (res.ok) {
+            filterStatusEl.textContent = 'Saved — restarting localizer...';
+            setTimeout(() => { filterStatusEl.textContent = ''; }, 3000);
+        } else {
+            const err = await res.json();
+            filterStatusEl.textContent = `Error: ${err.detail}`;
+        }
+    }
+
+    // load filter on page load
+    loadFilter();
 
     // Populate anchor table
     async function initAnchorsTable() {

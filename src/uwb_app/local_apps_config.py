@@ -45,6 +45,8 @@ class LocalizerCfg:
     layout_path: str | None = None
     pose_sink: PoseSinkCfg = PoseSinkCfg()
     filter_window: int = 5
+    filter_type: str = "sma"    # sma or ema, default is sma
+    filter_alpha: float = 0.3   # for ema
     # z_filter_window: int = 15
 
 
@@ -122,6 +124,8 @@ def load_localizer_cfg(path: Path) -> LocalizerCfg:
             linger_ms=int(pose_in.get("linger_ms", 0)),
         ),
         filter_window=int(loc_in.get("filter_window", 5)),
+        filter_type=str(loc_in.get("filter_type","sma")),
+        filter_alpha=float(loc_in.get("filter_alpha",0.3)),
         # z_filter_window=int(loc_in.get("z_filter_window", 15)),
     )
 

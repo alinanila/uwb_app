@@ -17,6 +17,8 @@ localizer:
     sndhwm: 32
     linger_ms: 0
   filter_window: 5
+  filer_type: "sma"   # sma or ema
+  filter_alpha: 0.3
   # z_filter_window: 15
 
 # layout:
