@@ -3,18 +3,14 @@
 A prototype system to aid visually impaired stage performers navigate a theatre environment using a UWB Real-Time Localisation System (RTLS). This provides the RTLS for this [stage navigation project](https://github.com/Dell-S/stage-support/tree/main)
 
 ## To Do
-* Calibrate anchor E better
-* Integration with [wearable](https://github.com/alinanila/uwb_wearable/tree/main)
-* Moving average for smoothing tag positio
-* IMU integration for orientation and possible Kalman filtering for a better fix than moving average
+* Moving average for smoothing tag position
+    - Functions for simple and exponential to compare performance, make this configurable from the webpage?
+    - Function for Kalman filtering, see if it's worth it
 * Bluetooth TTS audio, either from Pi D, or from an MCU worn on the performer, depends which will be easier and more reliable
 * Buttons
     - Right now the systemd services handle ranging, hub and localiser, these start automatically
     - Calibration still being run manually over SSH, would be good to get this activated by a button interrupt and guided with TTS audio
     - Physical button for reloading localiser after updating the web server, rather than letting it run sudo?
-* CAD for packaging
-    - Think about how to design this so that all the stupid wires are contained well
-    - Make sure the packaging for the anchors and the tag (if designing something for it) are conducive to calibration - some kind of notch that the tag can fit to so that the antennas are aligned and the tag doesn't move about
 * Diagram for system overview/data flow (and calibration layout? should be the same)
 
 
