@@ -363,7 +363,7 @@ def main() -> None:
     # A (0,0)
     input("place tag on anchor A and press enter")
     dists_Apos = collect_distances(
-        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id
+        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:B, ANCHOR:C, ANCHOR:D, ANCHOR:E"}
     )
     print("distances at anchor A:", dists_Apos)
     # A = (0.0, 0.0)
