@@ -35,6 +35,8 @@ class PoseState:
     x: Optional[float] = None
     y: Optional[float] = None
     # z: Optional[float] = None
+    x_raw: Optional[float] = None
+    y_raw: Optional[float] = None
     peer_id: Optional[str] = None
     timestamp: Optional[float] = None
 
@@ -175,6 +177,8 @@ def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOP
             x = event.get("x_m")
             y = event.get("y_m")
             # z = event.get("z_m")
+            x_raw = event.get("x_raw")
+            y_raw = event.get("y_raw")
             peer_id = event.get("peer_id")
             ts = event.get("timestamp")
 
@@ -185,6 +189,8 @@ def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOP
                 pose_state.x = float(x)
                 pose_state.y = float(y)
                 # pose_state.z = float(z) if isinstance(z, (int, float)) else None
+                pose_state.x_raw = float(x_raw) if isinstance(x_raw, (int, float)) else None
+                pose_state.y_raw = float(y_raw) if isinstance(y_raw, (int, float)) else None
                 pose_state.peer_id = str(peer_id) if peer_id is not None else None
                 pose_state.timestamp = float(ts) if isinstance(ts, (int, float)) else time.time()
     except Exception as e:
@@ -372,6 +378,8 @@ def api_pose():
             "x": pose_state.x,
             "y": pose_state.y,
             # "z": pose_state.z,
+            "x_raw": pose_state.x_raw,
+            "y_raw": pose_state.y_raw,
             "peer_id": pose_state.peer_id,
             "timestamp": pose_state.timestamp,
         }
@@ -740,6 +748,9 @@ def index() -> str:
       if (data.has_pose) {
         lastPose = data;
         draw();
+        const rawStr = data.x_raw && data.y_raw 
+            ? ` [raw: x=${data.x_raw.toFixed(2)}, y=${data.y_raw.toFixed(2)}]` 
+            : '';
         info.textContent = `${data.peer_id || ''} at x=${data.x.toFixed(2)} m, y=${data.y.toFixed(2)} m${zStr}`;
       } else {
         info.textContent = 'No pose yet.';

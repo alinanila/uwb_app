@@ -422,6 +422,8 @@ class Localizer:
             "y_m": y_m,
             # "z_m": z_m,         #comment out for 2D
             # add raw values for debugging if needed
+            "x_raw": x_raw,
+            "y_raw": y_raw,
             "anchors_used": sorted(state.measurements.keys()),
             "n_anchors": len(state.measurements),
             "debug": {
@@ -439,6 +441,7 @@ class Localizer:
                 f"x={x_m:.3f} y={y_m:.3f} n={out_event['n_anchors']}"
                 # f"x={x_m:.3f} y={y_m:.3f} z={z_m:.3f} n={out_event['n_anchors']}"
                 # print raw values if needed
+                f"x_raw={x_m:.3f} y_raw={y_m:.3f}"
             )
         if self._publisher is not None:
             self._publisher.publish(out_event)
