@@ -203,7 +203,7 @@ def solve_from_anchors(
 ) -> tuple[float, float, float]:
     """
     solve for 3d position of new anchor given distances to all known anchors
-    uses gauss-newton — same approach as the localiser
+    uses gauss-newton — same approach as the localizer
     requires at least 4 known anchors with valid distances
     """
     usable = [
@@ -363,7 +363,7 @@ def main() -> None:
     # A (0,0)
     input("place tag on anchor A and press enter")
     dists_Apos = collect_distances(
-        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:B, ANCHOR:C, ANCHOR:D, ANCHOR:E"}
+        args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:D"}
     )
     print("distances at anchor A:", dists_Apos)
     # A = (0.0, 0.0)

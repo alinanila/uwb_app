@@ -232,7 +232,7 @@ class PositionFilter:
         self._ema_state.clear()
 
     def update(self, peer_label: str, x: float, y: float) -> tuple[float, float]:
-        if self.filter_type == "ema":
+        if self._filter_type == "ema":
             return self._update_ema(peer_label, x, y)
         return self._update_sma(peer_label, x, y)
     
