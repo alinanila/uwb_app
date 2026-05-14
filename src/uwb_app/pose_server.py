@@ -749,11 +749,11 @@ def index() -> str:
         lastPose = data;
         draw();
         const rawStr = data.x_raw && data.y_raw 
-            ? ` [raw: x=${data.x_raw.toFixed(2)}, y=${data.y_raw.toFixed(2)}]` 
-            : '';
-        info.textContent = `${data.peer_id || ''} at x=${data.x.toFixed(2)} m, y=${data.y.toFixed(2)} m${zStr}`;
+          ? ` [raw: x=${data.x_raw.toFixed(2)}, y=${data.y_raw.toFixed(2)}]` 
+          : '';
+        info.textContent = `${data.peer_id || ''} at x=${data.x.toFixed(2)} m, y=${data.y.toFixed(2)} m${rawStr}`;
       } else {
-        info.textContent = 'No pose yet.';
+       info.textContent = 'No pose yet.';
       }
     }
 
