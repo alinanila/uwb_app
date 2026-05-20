@@ -13,7 +13,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import subprocess
-import socket
 import uvicorn
 
 from .local_apps_config import (
@@ -67,8 +66,6 @@ class FilterState:
 
 sensor_state = SensorState()
 sensor_lock = threading.Lock()
-
-SENSOR_UDP_PORT = 5570
 
 pose_state = PoseState()
 pose_lock = threading.Lock()
@@ -201,70 +198,89 @@ def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOP
 
 
 def sensor_listener(
-    udp_port: int = SENSOR_UDP_PORT,
-    zmq_endpoint: str = "tcp://0.0.0.0:5571",
+    endpoint: str = "tcp://0.0.0.0:5572",
     topic: str = "sensors",
+    zmq_forward_endpoint: str = "tcp://0.0.0.0:5571",
+    zmq_forward_topic: str = "sensors",
 ) -> None:
     """
-    background thread: receive UDP sensor packets from ESP32,
-    update sensor_state and republish over ZMQ PUB
+    background thread: subscribe to wearable IMU ZMQ PUB
+    server binds, wearable connects
+    update sensor_state and republish on sensors topic for external subscribers
     """
-
     ctx = zmq.Context.instance()
+
+    # bind and wait for wearable to connect
+    sub = ctx.socket(zmq.SUB)
+    sub.setsockopt(zmq.RCVHWM, 128)
+    sub.setsockopt(zmq.LINGER, 0)
+    sub.setsockopt(zmq.SUBSCRIBE, topic.encode("utf-8"))
+    sub.bind(endpoint)
+
+    # republish for external subscribers e.g. kalman filter in localize.py
     pub = ctx.socket(zmq.PUB)
     pub.setsockopt(zmq.SNDHWM, 32)
     pub.setsockopt(zmq.LINGER, 0)
-    pub.bind(zmq_endpoint)
-    topic_bytes = topic.encode("utf-8")
+    pub.bind(zmq_forward_endpoint)
+    forward_topic_bytes = zmq_forward_topic.encode("utf-8")
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("0.0.0.0", udp_port))
-    sock.settimeout(1.0)
-    print(f"sensor UDP listener on port {udp_port}")
-    print(f"sensor ZMQ publisher on {zmq_endpoint} topic={topic}")
+    print(f"sensor ZMQ subscriber bound on {endpoint} topic={topic}")
+    print(f"sensor ZMQ republisher bound on {zmq_forward_endpoint} topic={zmq_forward_topic}")
+
+    poller = zmq.Poller()
+    poller.register(sub, zmq.POLLIN)
 
     while True:
         try:
-            data, addr = sock.recvfrom(2048)
-        except socket.timeout:
-            continue
+            events = dict(poller.poll(timeout=100))
         except Exception as e:
-            print(f"sensor_zmq_publisher error: {e}")
+            print(f"sensor_listener poll error: {e}")
             continue
 
-        try:
-            event = json.loads(data.decode("utf-8"))
-        except json.JSONDecodeError:
+        if sub not in events:
             continue
 
-        if event.get("schema") != "uwb.sensors":
-            continue
+        while True:
+            try:
+                parts = sub.recv_multipart(flags=zmq.NOBLOCK)
+            except zmq.Again:
+                break
 
-        bno = event.get("bno085", {})
-        lsm = event.get("lsm303", {})
+            if len(parts) < 2:
+                continue
 
-        with sensor_lock:
-            sensor_state.timestamp                = event.get("timestamp")
-            sensor_state.device_id                = event.get("device_id")
-            sensor_state.bno_rotation_vector      = bno.get("rotation_vector")
-            sensor_state.bno_game_rotation_vector = bno.get("game_rotation_vector")
-            sensor_state.bno_linear_acceleration  = bno.get("linear_acceleration")
-            sensor_state.bno_accelerometer        = bno.get("accelerometer")
-            sensor_state.bno_gyroscope            = bno.get("gyroscope")
-            sensor_state.bno_gravity              = bno.get("gravity")
-            sensor_state.bno_steps                = bno.get("steps")
-            sensor_state.bno_stability            = bno.get("stability")
-            # sensor_state.lsm_magnetometer         = lsm.get("magnetometer")
-            # sensor_state.lsm_accelerometer        = lsm.get("accelerometer")
-            # sensor_state.lsm_heading              = lsm.get("heading")
+            try:
+                event = json.loads(parts[1])
+            except json.JSONDecodeError:
+                continue
 
-        # republish over ZMQ
-        try:
-            payload = json.dumps(event, separators=(",", ":")).encode("utf-8")
-            pub.send_multipart([topic_bytes, payload], flags=zmq.NOBLOCK)
-        except zmq.Again:
-            pass
+            if event.get("schema") != "uwb.sensors":
+                continue
+
+            bno = event.get("bno085", {}) or {}
+
+            with sensor_lock:
+                sensor_state.timestamp                = event.get("timestamp")
+                sensor_state.device_id                = event.get("device_id")
+                sensor_state.bno_rotation_vector      = bno.get("rotation_vector")
+                sensor_state.bno_game_rotation_vector = bno.get("game_rotation_vector")
+                sensor_state.bno_linear_acceleration  = bno.get("linear_acceleration")
+                sensor_state.bno_accelerometer        = bno.get("accelerometer")
+                sensor_state.bno_gyroscope            = bno.get("gyroscope")
+                sensor_state.bno_gravity              = bno.get("gravity")
+                sensor_state.bno_steps                = bno.get("steps")
+                sensor_state.bno_stability            = bno.get("stability")
+                sensor_state.bno_is_moving            = bno.get("is_moving")
+                sensor_state.bno_motion_magnitude     = bno.get("motion_magnitude")
+
+            # republish unchanged for external subscribers
+            try:
+                pub.send_multipart(
+                    [forward_topic_bytes, parts[1]],
+                    flags=zmq.NOBLOCK,
+                )
+            except zmq.Again:
+                pass
 
 
 def restart_localizer_service() -> None:
@@ -286,33 +302,29 @@ app = FastAPI(title="UWB Localisation Visualiser")
 
 @app.on_event("startup")
 def startup_event() -> None:
-    # start ZMQ listener thread on startup
     t = threading.Thread(target=pose_listener, daemon=True)
     t.start()
 
     s = threading.Thread(target=sensor_listener, daemon=True)
     s.start()
 
-    # print anchor layout on startup
     try:
         layout_file = get_layout_file()
         anchors = load_layout(layout_file)
         print("\nanchor layout:")
         for aid, pos in sorted(anchors.items()):
-            print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f}")
-            # print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f} z={pos[2]:.3f}")
+            print(f"  {aid} = x={pos[0]:.3f} y={pos[1]:.3f} z={pos[2]:.3f}")
         print()
     except Exception as e:
         print(f"could not load anchor layout on startup: {e}")
 
-    # load current filter config
     try:
         data = load_yaml_mapping(DEFAULT_LOCALIZER_CONFIG)
         loc = data.get("localizer", {})
         with filter_lock:
-            filter_state.filter_type = str(loc.get("filter_type", "sma"))
+            filter_state.filter_type   = str(loc.get("filter_type", "sma"))
             filter_state.filter_window = int(loc.get("filter_window", 5))
-            filter_state.filter_alpha = float(loc.get("filter_alpha", 0.3))
+            filter_state.filter_alpha  = float(loc.get("filter_alpha", 0.3))
     except Exception as e:
         print(f"could not load filter config on startup: {e}")
 
