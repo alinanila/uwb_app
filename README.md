@@ -3,9 +3,6 @@
 A prototype system to aid visually impaired stage performers navigate a theatre environment using a UWB Real-Time Localisation System (RTLS). This provides the RTLS for this [stage navigation project](https://github.com/Dell-S/stage-support/tree/main)
 
 ## To Do
-* Moving average for smoothing tag position
-    - Functions for simple and exponential to compare performance, make this configurable from the webpage?
-    - Function for Kalman filtering, see if it's worth it
 * Bluetooth TTS audio, either from Pi D, or from an MCU worn on the performer, depends which will be easier and more reliable
 * Buttons
     - Right now the systemd services handle ranging, hub and localiser, these start automatically
@@ -57,6 +54,7 @@ The original repo is itself based on the **DW3xxx & QM3xxx SDK v1.1.1**, which a
 ## Prerequisites
 
 - [Hatch](https://hatch.pypa.io/latest/install/) installed on all Pis
+  - Recommended install method using pipx
 - Python 3.12
 - All Pis connected to the same network with static IPs
 - It is recommended to perform calibration of the UWB antennae using the Qorvo UWB Explorer to minimise ranging error
