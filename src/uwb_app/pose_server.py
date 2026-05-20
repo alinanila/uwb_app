@@ -546,7 +546,6 @@ def index() -> str:
           <tr><td style="padding: 0.3rem 0.6rem; color: #666;">Stability</td>             <td id="s-stab"     style="padding: 0.3rem 0.6rem; font-family: monospace;">—</td></tr>
         </tbody>
       </table>
-      <p id="sensor-status" style="color: #666; font-size: 0.9rem;">No sensor data yet.</p>
     </div>
     
     <div>
@@ -791,7 +790,6 @@ def index() -> str:
         const data = await res.json();
 
         if (!data.has_data) {
-            document.getElementById('sensor-status').textContent = 'No sensor data yet.';
             return;
         }
 
@@ -817,8 +815,6 @@ def index() -> str:
             ? `${bno.stability} (${stabilityLabels[bno.stability] || '?'})`
             : '—';
 
-        document.getElementById('sensor-status').textContent =
-            `device: ${data.device_id || '?'}  t=${data.timestamp != null ? data.timestamp.toFixed(3) : '?'}s`;
     }
 
     const filterStatusEl = document.getElementById('filter-status');
