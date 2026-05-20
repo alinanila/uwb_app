@@ -812,7 +812,7 @@ def index() -> str:
             : '—';
 
         document.getElementById('s-stab').textContent = bno.stability != null
-            ? `${bno.stability} (${stabilityLabels[bno.stability] || '?'})`
+            ? `${bno.stability}`
             : '—';
 
     }
