@@ -39,9 +39,9 @@ title Haptic Stage Navigation System — Deployment Architecture
 
 
 ' ─────────────────────────────────────────
-' ANCHORS
+' STATIC
 ' ─────────────────────────────────────────
-rectangle "Static Components" as anchors #line.dashed{
+rectangle "Static Components" as static #line.dashed{
   ' ─────────────────────────────────────────
   ' UWB ANCHOR LAYER
   ' ─────────────────────────────────────────
@@ -80,6 +80,8 @@ rectangle "Static Components" as anchors #line.dashed{
     UWBhub --> UWBlocalize : ZeroMQ PUB/SUB\ntcp://<pi-D>:5560\ntopic:meas
     UWBlocalize --> TCP : ZeroMQ PUB/SUB\ntcp://<pi-D>:5561\ntopic:pose
   }
+  
+  component "<<Wi-Fi router>>\nGL.iNet Opal" as router
 }
 
 
@@ -159,7 +161,7 @@ rectangle "Wearable Components" as belt #line.dashed {
 ' NODE CONNECTIONS
 ' ─────────────────────────────────────────
 interface "UWB DS-TWR" as UWB 
-interface "JSON frames\n{amplitudes[16],\nduration,\ntimestamp,\ndevice}" as JSON
+interface "<<Upstream Network>>" as wifi
 
 Tag <--> UWB
 UWB <--> Anchor
@@ -172,8 +174,13 @@ TCPsensors --> Laptop
 
 ZMQwearPub --> TCPsensors
 
-Laptop --> JSON
-JSON --> WShandler
+Laptop --> WShandler : JSON frames\n{amplitudes[16],\nduration,\ntimestamp,\ndevice}
+
+wifi --> router : Wi-Fi
+router --> UWBagentD : Wi-Fi
+router --> UWBagent : Wi-Fi
+router --> Laptop : Wi-Fi
+router --> WearablePi : Wi-Fi
 
 
 

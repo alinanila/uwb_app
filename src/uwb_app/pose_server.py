@@ -217,7 +217,6 @@ def sensor_listener(
     sub.setsockopt(zmq.SUBSCRIBE, topic.encode("utf-8"))
     sub.bind(endpoint)
 
-    # republish for external subscribers e.g. kalman filter in localize.py
     pub = ctx.socket(zmq.PUB)
     pub.setsockopt(zmq.SNDHWM, 32)
     pub.setsockopt(zmq.LINGER, 0)

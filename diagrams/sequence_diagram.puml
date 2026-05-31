@@ -56,6 +56,7 @@ box "Wearable Hardware" #fdf0f0
   participant "«LRA» VG1040003D\nMotors 8–15" as LRA2
 end box
 
+
 ' ─────────────────────────────────────────
 ' 1. SYSTEM STARTUP
 ' ─────────────────────────────────────────
