@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import socket
 import threading
 import time
 from dataclasses import dataclass
@@ -198,88 +200,74 @@ def pose_listener(endpoint: str = POSE_ENDPOINT_DEFAULT, topic: bytes = POSE_TOP
 
 
 def sensor_listener(
-    endpoint: str = "tcp://0.0.0.0:5572",
-    topic: str = "sensors",
+    udp_host: str = "0.0.0.0",
+    udp_port: int = 5570,
     zmq_forward_endpoint: str = "tcp://0.0.0.0:5571",
     zmq_forward_topic: str = "sensors",
 ) -> None:
     """
-    background thread: subscribe to wearable IMU ZMQ PUB
-    server binds, wearable connects
-    update sensor_state and republish on sensors topic for external subscribers
+    background thread: receive wearable IMU telemetry over UDP.
+
+    The ESP32 wearable (uwb_wearable/src/publisher.cpp) sends bare JSON
+    datagrams via WiFiUDP to SERVER_IP:UDP_PORT (default 5570) — it does NOT
+    speak ZMQ. So we bind a UDP socket here, update sensor_state (which feeds
+    GET /api/sensors that the stage-support bridge polls), and republish each
+    frame on the ZMQ 'sensors' topic for any external ZMQ subscribers.
     """
     ctx = zmq.Context.instance()
-
-    # bind and wait for wearable to connect
-    sub = ctx.socket(zmq.SUB)
-    sub.setsockopt(zmq.RCVHWM, 128)
-    sub.setsockopt(zmq.LINGER, 0)
-    sub.setsockopt(zmq.SUBSCRIBE, topic.encode("utf-8"))
-    sub.bind(endpoint)
-
     pub = ctx.socket(zmq.PUB)
     pub.setsockopt(zmq.SNDHWM, 32)
     pub.setsockopt(zmq.LINGER, 0)
     pub.bind(zmq_forward_endpoint)
     forward_topic_bytes = zmq_forward_topic.encode("utf-8")
 
-    print(f"sensor ZMQ subscriber bound on {endpoint} topic={topic}")
-    print(f"sensor ZMQ republisher bound on {zmq_forward_endpoint} topic={zmq_forward_topic}")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((udp_host, udp_port))
+    sock.settimeout(1.0)
 
-    poller = zmq.Poller()
-    poller.register(sub, zmq.POLLIN)
+    print(f"sensor UDP listener bound on {udp_host}:{udp_port}")
+    print(f"sensor ZMQ republisher bound on {zmq_forward_endpoint} topic={zmq_forward_topic}")
 
     while True:
         try:
-            events = dict(poller.poll(timeout=100))
-        except Exception as e:
-            print(f"sensor_listener poll error: {e}")
+            data, _addr = sock.recvfrom(8192)
+        except socket.timeout:
+            continue
+        except OSError as e:
+            print(f"sensor_listener recv error: {e}")
+            time.sleep(0.1)
             continue
 
-        if sub not in events:
+        try:
+            event = json.loads(data)
+        except (json.JSONDecodeError, UnicodeDecodeError):
             continue
 
-        while True:
-            try:
-                parts = sub.recv_multipart(flags=zmq.NOBLOCK)
-            except zmq.Again:
-                break
+        if event.get("schema") != "uwb.sensors":
+            continue
 
-            if len(parts) < 2:
-                continue
+        bno = event.get("bno085", {}) or {}
 
-            try:
-                event = json.loads(parts[1])
-            except json.JSONDecodeError:
-                continue
+        with sensor_lock:
+            sensor_state.timestamp                = event.get("timestamp")
+            sensor_state.device_id                = event.get("device_id")
+            sensor_state.bno_rotation_vector      = bno.get("rotation_vector")
+            sensor_state.bno_game_rotation_vector = bno.get("game_rotation_vector")
+            sensor_state.bno_linear_acceleration  = bno.get("linear_acceleration")
+            sensor_state.bno_accelerometer        = bno.get("accelerometer")
+            sensor_state.bno_gyroscope            = bno.get("gyroscope")
+            sensor_state.bno_gravity              = bno.get("gravity")
+            sensor_state.bno_steps                = bno.get("steps")
+            sensor_state.bno_stability            = bno.get("stability")
+            sensor_state.bno_is_moving            = bno.get("is_moving")
+            sensor_state.bno_motion_magnitude     = bno.get("motion_magnitude")
 
-            if event.get("schema") != "uwb.sensors":
-                continue
-
-            bno = event.get("bno085", {}) or {}
-
-            with sensor_lock:
-                sensor_state.timestamp                = event.get("timestamp")
-                sensor_state.device_id                = event.get("device_id")
-                sensor_state.bno_rotation_vector      = bno.get("rotation_vector")
-                sensor_state.bno_game_rotation_vector = bno.get("game_rotation_vector")
-                sensor_state.bno_linear_acceleration  = bno.get("linear_acceleration")
-                sensor_state.bno_accelerometer        = bno.get("accelerometer")
-                sensor_state.bno_gyroscope            = bno.get("gyroscope")
-                sensor_state.bno_gravity              = bno.get("gravity")
-                sensor_state.bno_steps                = bno.get("steps")
-                sensor_state.bno_stability            = bno.get("stability")
-                sensor_state.bno_is_moving            = bno.get("is_moving")
-                sensor_state.bno_motion_magnitude     = bno.get("motion_magnitude")
-
-            # republish unchanged for external subscribers
-            try:
-                pub.send_multipart(
-                    [forward_topic_bytes, parts[1]],
-                    flags=zmq.NOBLOCK,
-                )
-            except zmq.Again:
-                pass
+        # republish for any external ZMQ subscribers (topic + raw json bytes)
+        try:
+            pub.send_multipart([forward_topic_bytes, data], flags=zmq.NOBLOCK)
+        except zmq.Again:
+            pass
 
 
 def restart_localizer_service() -> None:
@@ -464,7 +452,10 @@ def api_update_filter(update: FilterUpdate):
 
 
 def main() -> None:
-      uvicorn.run("uwb_app.pose_server:app", host="0.0.0.0", port=8000)
+    # pose_server's HTTP port. Defaults to 8080 because on the single-Pi rig the
+    # haptic belt-1 server already owns :8000. Override with POSE_SERVER_PORT.
+    port = int(os.getenv("POSE_SERVER_PORT", "8080"))
+    uvicorn.run("uwb_app.pose_server:app", host="0.0.0.0", port=port)
 
 
 @app.get("/", response_class=HTMLResponse)
