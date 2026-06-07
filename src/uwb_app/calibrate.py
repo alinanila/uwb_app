@@ -44,11 +44,13 @@ def collect_distances(
     duration_s: float,
     peer_id: str,
     expected_ids: set[str] | None = None,
-    settle_threshold_m: float = 0.05,  # max std dev to consider stable
-    settle_window: int = 20,           # number of readings to check stability over
+    settle_threshold_m: float = 0.08,  # max std dev to consider stable
+    settle_window: int = 10,           # number of readings to check stability over
+    settle_timeout_s: float = 30.0
 ) -> Dict[str, float]:
     """
     wait for distances to stabilise before averaging
+    if settling too long timeout and average anyway
     """
     ctx = zmq.Context.instance()
     sub = ctx.socket(zmq.SUB)
@@ -59,8 +61,12 @@ def collect_distances(
     print("  waiting for tag to settle...")
     recent: Dict[str, list] = {}
     settled = False
+    settle_start = time.monotonic()
 
     while not settled:
+        if time.monotonic() - settle_start > settle_timeout_s:
+            print(f"  settle timeout after {settle_timeout_s:.0f}s — accumulating anyway")
+            break
         try:
             parts = sub.recv_multipart(flags=zmq.NOBLOCK)
         except zmq.Again:
@@ -172,118 +178,90 @@ def solve_bilateration(
     # return x, y 
 
 
-def solve_trilateration(
-    D_x: float,
-    C_x: float,
-    C_y: float,
-    dist_A: float,
-    dist_D: float,
-    dist_C: float,
-) -> tuple[float, float, float]:
-    """
-    solve for x,y,z (anchor B specifically)
-    assuming A = (0,0,0), D = (D_x,0,0) and C = (C_x,C_y,0) to define the xy-plane
-    making the assumption that anchor B is above the xy-plane by taking positive sqrt
-    requires anchor B to not be coplanar with other three
-    """
-    x = (D_x**2 + dist_A**2 - dist_D**2) / (2.0 * D_x)
-    y = (C_x**2 + C_y**2 - 2.0 * C_x * x + dist_A**2 - dist_C**2) / (2.0 * C_y)
-    z_sq = dist_A**2 - x**2 - y**2
-    if z_sq < 0:
-        z_sq = 0.0
-    z = math.sqrt(z_sq)
-    return x, y, z
+# def solve_trilateration(
+#     D_x: float,
+#     C_x: float,
+#     C_y: float,
+#     dist_A: float,
+#     dist_D: float,
+#     dist_C: float,
+# ) -> tuple[float, float, float]:
+#     """
+#     solve for x,y,z (anchor B specifically)
+#     assuming A = (0,0,0), D = (D_x,0,0) and C = (C_x,C_y,0) to define the xy-plane
+#     making the assumption that anchor B is above the xy-plane by taking positive sqrt
+#     requires anchor B to not be coplanar with other three
+#     """
+#     x = (D_x**2 + dist_A**2 - dist_D**2) / (2.0 * D_x)
+#     y = (C_x**2 + C_y**2 - 2.0 * C_x * x + dist_A**2 - dist_C**2) / (2.0 * C_y)
+#     z_sq = dist_A**2 - x**2 - y**2
+#     if z_sq < 0:
+#         z_sq = 0.0
+#     z = math.sqrt(z_sq)
+#     return x, y, z
 
 
 def solve_from_anchors(
     known_anchors: Dict[str, tuple[float, float, float]],
     distances: Dict[str, float],
     max_iterations: int = 50,
-    max_step_m: float = 1.0,
 ) -> tuple[float, float, float]:
     """
-    solve for 3d position of new anchor given distances to all known anchors
-    uses gauss-newton — same approach as the localizer
-    requires at least 4 known anchors with valid distances
+    solve for 2d position of a new anchor given distances to all known anchors
+    uses gauss-newton — overdetermined when 3+ anchors available
+    z is always 0.0
     """
     usable = [
         (known_anchors[aid], distances[aid])
         for aid in distances
         if aid in known_anchors and distances[aid] > 0
     ]
-    if len(usable) < 4:
+    if len(usable) < 2:
         raise RuntimeError(
-            f"need at least 4 anchor distances to solve 3D position, got {len(usable)}"
+            f"need at least 2 anchor distances to solve 2D position, got {len(usable)}"
         )
 
     # initialise at centroid of known anchors
     x = sum(p[0] for p, _ in usable) / len(usable)
     y = sum(p[1] for p, _ in usable) / len(usable)
-    z = sum(p[2] for p, _ in usable) / len(usable)
 
     for _ in range(max_iterations):
-        h11 = h12 = h13 = h22 = h23 = h33 = 0.0
-        g1 = g2 = g3 = 0.0
+        h11 = h12 = h22 = 0.0
+        g1 = g2 = 0.0
 
         for (ax, ay, az), measured in usable:
             dx = x - ax
             dy = y - ay
-            dz = z - az
-            predicted = math.sqrt(dx*dx + dy*dy + dz*dz)
+            predicted = math.hypot(dx, dy)
             if predicted < 1e-9:
                 continue
-
-            weight = min(1.0, predicted / 0.3)
             residual = predicted - measured
             jx = dx / predicted
             jy = dy / predicted
-            jz = dz / predicted
+            h11 += jx * jx
+            h12 += jx * jy
+            h22 += jy * jy
+            g1  += jx * residual
+            g2  += jy * residual
 
-            h11 += weight * jx * jx
-            h12 += weight * jx * jy
-            h13 += weight * jx * jz
-            h22 += weight * jy * jy
-            h23 += weight * jy * jz
-            h33 += weight * jz * jz
-            g1  += weight * jx * residual
-            g2  += weight * jy * residual
-            g3  += weight * jz * residual
-
-        det = (
-            h11 * (h22 * h33 - h23 * h23)
-            - h12 * (h12 * h33 - h23 * h13)
-            + h13 * (h12 * h23 - h22 * h13)
-        )
+        det = (h11 * h22) - (h12 * h12)
         if abs(det) < 1e-12:
-            raise RuntimeError("singular matrix during solve — check anchor geometry")
+            raise RuntimeError(
+                "singular matrix — check anchor geometry and distances"
+            )
 
-        inv11 = (h22 * h33 - h23 * h23) / det
-        inv12 = -(h12 * h33 - h23 * h13) / det
-        inv13 = (h12 * h23 - h22 * h13) / det
-        inv22 = (h11 * h33 - h13 * h13) / det
-        inv23 = -(h11 * h23 - h13 * h12) / det
-        inv33 = (h11 * h22 - h12 * h12) / det
-
-        step_x = inv11 * g1 + inv12 * g2 + inv13 * g3
-        step_y = inv12 * g1 + inv22 * g2 + inv23 * g3
-        step_z = inv13 * g1 + inv23 * g2 + inv33 * g3
-
-        # clamp step size
-        step_mag = math.sqrt(step_x**2 + step_y**2 + step_z**2)
-        if step_mag > max_step_m:
-            scale = max_step_m / step_mag
-            step_x *= scale
-            step_y *= scale
-            step_z *= scale
-
+        inv11 =  h22 / det
+        inv12 = -h12 / det
+        inv22 =  h11 / det
+        step_x = inv11 * g1 + inv12 * g2
+        step_y = inv12 * g1 + inv22 * g2
         x -= step_x
         y -= step_y
-        z -= step_z
 
-        if math.sqrt(step_x**2 + step_y**2 + step_z**2) < 1e-6:
+        if math.hypot(step_x, step_y) < 1e-6:
             break
 
-    return (x, y, z)
+    return (x, y, 0.0)
 
 
 def update_layout(
@@ -407,17 +385,10 @@ def main() -> None:
         args.hub_endpoint, args.topic, args.avg_seconds, args.peer_id, {"ANCHOR:A", "ANCHOR:D", "ANCHOR:C"}
     )
     print("distances at anchor B:", dists_Bpos)
-    # measure from A and D
-    dist_AB = dists_Bpos.get("ANCHOR:A")
-    dist_DB = dists_Bpos.get("ANCHOR:D")
-    dist_CB = dists_Bpos.get("ANCHOR:C")
-    if dist_AB is None or dist_DB is None or dist_CB is None:
-        raise RuntimeError(
-            "missing distance from anchor A and/or D and/or C; check IDs/config"
-        )
-    
-    # B = solve_bilateration(D_x=D[0], dist_A=dist_AB, dist_D=dist_DB)
-    B = solve_trilateration(D_x=D[0], C_x=C[0], C_y=C[1], dist_A=dist_AB, dist_D=dist_DB, dist_C=dist_CB)
+
+    known_anchors_b = {"ANCHOR:A": A, "ANCHOR:D": D, "ANCHOR:C": C}
+    B = solve_from_anchors(known_anchors_b, dists_Bpos)
+
 
     # solve for E from all 4 known anchors
     input("place tag at anchor E and press enter")
@@ -427,14 +398,14 @@ def main() -> None:
     )
     print("distances at anchor E:", dists_Epos)
 
-    known_anchors = {
+    known_anchors_e = {
         "ANCHOR:A": A,
         "ANCHOR:B": B,
         "ANCHOR:C": C,
         "ANCHOR:D": D,
     }
 
-    E = solve_from_anchors(known_anchors, dists_Epos)
+    E = solve_from_anchors(known_anchors_e, dists_Epos)
 
     print(f"ANCHOR:E = {E}")
 
